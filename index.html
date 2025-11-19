@@ -8,7 +8,9 @@
     <script type="importmap">
     {
         "imports": {
-            "tmi.js": "https://esm.sh/tmi.js"
+            "tmi.js": "https://esm.sh/tmi.js",
+            "three": "https://esm.sh/three@0.160.0",
+            "three/addons/": "https://esm.sh/three@0.160.0/examples/jsm/"
         }
     }
     </script>
@@ -58,7 +60,7 @@
     </div>
 
     <div id="game-container" class="hidden">
-        <canvas id="game-canvas"></canvas>
+        <!-- Canvas removed, renderer creates its own -->
     </div>
 
     <script type="module" src="main.js"></script>

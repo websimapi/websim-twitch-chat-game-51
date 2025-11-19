@@ -5,14 +5,16 @@ import { initUIManager } from './ui-manager.js';
 import { createNewWorld } from './ui/world-management.js';
 import { initRemoteInventory } from './remote-inventory.js';
 
-const canvas = document.getElementById('game-canvas');
+// Use container instead of canvas for Three.js
+const gameContainer = document.getElementById('game-container');
 
 function startGame(channel, worldName, hosts, settings) {
     console.log(`Connecting to #${channel}, world: ${worldName}...`);
 
     AudioManager.init();
 
-    const game = new Game(canvas, channel, worldName, hosts, settings);
+    // Pass container, not canvas
+    const game = new Game(gameContainer, channel, worldName, hosts, settings);
     
     initTwitch(
         channel, 

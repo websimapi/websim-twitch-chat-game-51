@@ -57,8 +57,8 @@ export function getSettingsHTML(worldName, settings) {
                         <div class="setting-item">
                             <label for="view_mode">View Mode</label>
                             <select id="view_mode" data-path="visuals.view_mode" style="padding: 5px; background: #333; color: #fff; border: 1px solid #555; border-radius: 4px;">
-                                <option value="2d" ${settings.visuals && settings.visuals.view_mode === '2d' ? 'selected' : ''}>2D Top-Down</option>
-                                <option value="2.5d" ${settings.visuals && settings.visuals.view_mode === '2.5d' ? 'selected' : ''}>2.5D Isometric</option>
+                                <option value="top-down" ${settings.visuals && settings.visuals.view_mode === 'top-down' ? 'selected' : ''}>Top Down (3D)</option>
+                                <option value="isometric" ${settings.visuals && settings.visuals.view_mode === 'isometric' ? 'selected' : ''}>Isometric (2.5D)</option>
                             </select>
                         </div>
                         <div class="setting-item">

@@ -1,364 +1,306 @@
-import { PLAYER_STATE } from '../player-state.js';
-import { AudioManager } from '../audio-manager.js';
-import { getPlayerHitbox, getTreeTrunkHitbox } from '../game/physics.js';
+import * as THREE from 'three';
+import { renderPlayer } from '../player-renderer.js';
 import { TILE_TYPE } from '../map-tile-types.js';
-import { project, getSortDepth } from '../game/projection.js';
 
-function getVisibleTileRange(camera, canvas, map, viewMode) {
-    const ts = map.tileSize;
-    
-    if (viewMode === '2.5d') {
-        // Simple heuristic: Expand range significantly to cover rotation/skew
-        // Center tile
-        const centerX = (camera.x + canvas.width/2); // Screen coord relative to world 0,0? No camera.x IS the offset.
-        // Inverse projection is complex. Let's just return a large box around the approximate center.
-        // Since camera.x/y are somewhat arbitrary in 2.5D mode without the center offset logic being perfectly strictly defined 
-        // (we defined camera as top-left of viewport for 2d), we need to be careful.
+export class ThreeRenderer {
+    constructor(container) {
+        this.container = container;
+        this.scene = new THREE.Scene();
+        this.scene.background = new THREE.Color(0x87CEEB); // Sky blue background
+
+        // Camera will be setup in resize
+        this.camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 1000);
         
-        // Approximation:
-        // Get rough center in world units
-        const centerX_Screen = camera.x + canvas.width / 2;
-        const centerY_Screen = camera.y + canvas.height / 2;
+        this.renderer = new THREE.WebGLRenderer({ antialias: false }); // False for retro feel
+        this.renderer.shadowMap.enabled = true;
+        this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        this.renderer.setSize(window.innerWidth, window.innerHeight);
+        container.appendChild(this.renderer.domElement);
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+        this.scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(50, 100, 50);
+        dirLight.castShadow = true;
+        dirLight.shadow.camera.left = -50;
+        dirLight.shadow.camera.right = 50;
+        dirLight.shadow.camera.top = 50;
+        dirLight.shadow.camera.bottom = -50;
+        dirLight.shadow.mapSize.width = 2048;
+        dirLight.shadow.mapSize.height = 2048;
+        this.scene.add(dirLight);
+        this.dirLight = dirLight;
+
+        // Caches
+        this.terrainMesh = null;
+        this.textureCache = {};
+        this.sprites = new Map(); // id -> THREE.Sprite or THREE.Mesh
+        this.playerCanvases = new Map(); // id -> { canvas, texture }
         
-        // Map to Grid:
-        // x_scr = (x-y)*0.5*ts => x-y = x_scr / (0.5*ts)
-        // y_scr = (x+y)*0.25*ts => x+y = y_scr / (0.25*ts)
-        // 2x = (x_scr/0.5ts) + (y_scr/0.25ts)
-        const factorX = centerX_Screen / (0.5 * ts);
-        const factorY = centerY_Screen / (0.25 * ts);
-        const gridCenterX = (factorX + factorY) / 2;
-        const gridCenterY = (factorY - factorX) / 2; // Approx
-        
-        const radius = Math.ceil(canvas.width / ts) + 5; // Generous radius
-        
-        return {
-            drawStartX: Math.max(0, Math.floor(gridCenterX - radius)),
-            drawEndX: Math.min(map.width, Math.ceil(gridCenterX + radius)),
-            drawStartY: Math.max(0, Math.floor(gridCenterY - radius)),
-            drawEndY: Math.min(map.height, Math.ceil(gridCenterY + radius))
-        };
+        this.mapVersion = -1; // To track map regeneration
     }
 
-    const startTileX = Math.floor(camera.x / ts);
-    const endTileX = Math.ceil((camera.x + canvas.width) / ts);
-    const startTileY = Math.floor(camera.y / ts);
-    const endTileY = Math.ceil((camera.y + canvas.height) / ts);
+    resize(game) {
+        const width = window.innerWidth;
+        const height = window.innerHeight;
+        this.renderer.setSize(width, height);
+        this.updateCamera(game);
+    }
 
-    const drawStartX = Math.max(0, startTileX);
-    const drawEndX = Math.min(map.width, endTileX);
-    const drawStartY = Math.max(0, startTileY);
-    const drawEndY = Math.min(map.height, endTileY);
+    updateCamera(game) {
+        const cam = game.camera;
+        const aspect = window.innerWidth / window.innerHeight;
+        const viewHeight = cam.zoom;
+        const viewWidth = viewHeight * aspect;
 
-    return { drawStartX, drawEndX, drawStartY, drawEndY };
-}
+        this.camera.left = -viewWidth / 2;
+        this.camera.right = viewWidth / 2;
+        this.camera.top = viewHeight / 2;
+        this.camera.bottom = -viewHeight / 2;
+        this.camera.updateProjectionMatrix();
 
-function renderTargetHighlights(ctx, players, camera, tileSize, settings, map) {
-    if (!(settings.visuals && settings.visuals.show_target_indicator)) return;
-    const viewMode = settings.visuals.view_mode || '2d';
+        // Position camera
+        const x = cam.x;
+        const z = cam.y; // Game Y is 3D Z
 
-    ctx.save();
-    ctx.lineWidth = 2;
-    ctx.shadowBlur = 8;
-    
-    const alpha = (Math.sin(performance.now() / 250) + 1) / 2 * 0.6 + 0.4; 
-    
-    const woodcuttingStates = [PLAYER_STATE.MOVING_TO_TREE, PLAYER_STATE.CHOPPING];
-    const gatheringStates = [
-        PLAYER_STATE.MOVING_TO_LOGS,
-        PLAYER_STATE.HARVESTING_LOGS,
-        PLAYER_STATE.MOVING_TO_BUSHES,
-        PLAYER_STATE.HARVESTING_BUSHES
-    ];
-
-    for (const player of players.values()) {
-        let indicatorColor = null;
-
-        if (woodcuttingStates.includes(player.state)) {
-            ctx.shadowColor = 'rgba(255, 255, 100, 0.8)';
-            indicatorColor = `rgba(255, 255, 100, ${alpha})`;
-        } else if (gatheringStates.includes(player.state)) {
-            ctx.shadowColor = 'rgba(100, 220, 255, 0.8)';
-            indicatorColor = `rgba(100, 220, 255, ${alpha})`;
-        }
+        const viewMode = game.settings.visuals.view_mode || '2d';
         
-        if (indicatorColor && player.actionTarget) {
-            const targetX = player.actionTarget.x;
-            const targetY = player.actionTarget.y;
-
-            if (viewMode === '2.5d') {
-                // Use the isometric center of the tile with the actual terrain height
-                const h = map ? map.getHeight(targetX + 0.5, targetY + 0.5) : 0;
-                const centerPos = project(targetX + 0.5, targetY + 0.5, h, viewMode, tileSize);
-                const screenCX = centerPos.x - camera.x;
-                const screenCY = centerPos.y - camera.y;
-
-                // Diamond sized to the isometric tile footprint
-                const halfWidth = tileSize * 0.5;   // horizontal extent
-                const halfHeight = tileSize * 0.25; // vertical extent (matches projection ratios)
-
-                // Visibility check with a small margin
-                if (
-                    screenCX > -halfWidth * 2 && screenCX < ctx.canvas.width + halfWidth * 2 &&
-                    screenCY > -halfHeight * 2 && screenCY < ctx.canvas.height + halfHeight * 2
-                ) {
-                    ctx.strokeStyle = indicatorColor;
-                    ctx.beginPath();
-                    ctx.moveTo(screenCX + halfWidth,  screenCY);            // Right
-                    ctx.lineTo(screenCX,             screenCY + halfHeight); // Bottom
-                    ctx.lineTo(screenCX - halfWidth, screenCY);              // Left
-                    ctx.lineTo(screenCX,             screenCY - halfHeight); // Top
-                    ctx.closePath();
-                    ctx.stroke();
-                }
-            } else {
-                // 2D top-down: use tile's top-left corner
-                const pos = project(targetX, targetY, 0, viewMode, tileSize);
-                const screenX = pos.x - camera.x;
-                const screenY = pos.y - camera.y;
-
-                if (screenX > -tileSize * 2 && screenX < ctx.canvas.width + tileSize * 2 &&
-                    screenY > -tileSize * 2 && screenY < ctx.canvas.height + tileSize * 2) {
-
-                    ctx.strokeStyle = indicatorColor;
-                    ctx.strokeRect(screenX + 1, screenY + 1, tileSize - 2, tileSize - 2);
-                }
-            }
-        }
-    }
-    ctx.restore();
-}
-
-function renderYSorted(ctx, players, map, drawStartX, drawEndX, drawStartY, drawEndY, tileSize, camera, settings) {
-    const renderList = [];
-    const viewMode = settings.visuals.view_mode || '2d';
-
-    // 1. Add players to render list
-    for (const player of players.values()) {
-        if (player.isPowered()) {
-            renderList.push({
-                type: 'player',
-                // Use actual terrain height so players sort correctly above ground objects on slopes
-                depth: getSortDepth(player.pixelX, player.pixelY, player.z || 0, viewMode) + 0.5,
-                entity: player,
-            });
-        }
-    }
-    
-    // 2. Add tall map objects (trees) and objects that should "stand up" in 2.5D (logs, bushes)
-    // In 2D mode, logs/bushes are drawn in renderBase (flat). In 2.5D, we draw them here (standing).
-    
-    const shouldStandUp = (tileType) => {
-        if (viewMode === '2.5d') {
-            return tileType === TILE_TYPE.TREE || tileType === TILE_TYPE.LOGS || tileType === TILE_TYPE.BUSHES;
-        }
-        return tileType === TILE_TYPE.TREE;
-    };
-
-    for (let j = drawStartY; j < drawEndY; j++) {
-        for (let i = drawStartX; i < drawEndX; i++) {
-            if (j < 0 || j >= map.height || i < 0 || i >= map.width) continue;
-            const tileType = map.grid[j] ? map.grid[j][i] : TILE_TYPE.GRASS;
-            
-            if (shouldStandUp(tileType)) {
-                let typeStr = 'tree';
-                let img = map.treeTile;
-                if (tileType === TILE_TYPE.LOGS) { typeStr = 'logs'; img = map.logsTile; }
-                else if (tileType === TILE_TYPE.BUSHES) { typeStr = 'bushes'; img = map.bushesTile; }
-
-                const z = map.getHeight(i, j);
-                const entity = {
-                    x: i,
-                    y: j,
-                    z: z,
-                    image: img
-                };
-
-                let depthOffset = 0.5; // default for tall trees
-
-                // Ground items like logs and bushes should be clearly behind players on the same tile
-                if (typeStr === 'logs' || typeStr === 'bushes') {
-                    depthOffset = -1.0;
-                }
-                
-                renderList.push({
-                    type: typeStr,
-                    // Sort using the object's Z
-                    depth: getSortDepth(i, j, z, viewMode) + depthOffset,
-                    entity: entity
-                });
-            }
-        }
-    }
-    
-    // 3. Sort the list by depth
-    renderList.sort((a, b) => a.depth - b.depth);
-
-    // 4. Render from the sorted list
-    for (const item of renderList) {
-        if (item.type === 'player') {
-            item.entity.render(ctx, tileSize, camera.x, camera.y, viewMode);
+        if (viewMode === '2.5d' || viewMode === 'isometric') {
+            // Isometric-ish angle
+            this.camera.position.set(x + 20, 20, z + 20); // Offset
+            this.camera.lookAt(x, 0, z);
         } else {
-            const { x, y, z, image } = item.entity;
-             if (image && image.complete) {
-                const pos = project(x, y, z, viewMode, tileSize);
-                const screenX = Math.round(pos.x - camera.x);
-                const screenY = Math.round(pos.y - camera.y);
-                
-                if (viewMode === '2.5d') {
-                    // Draw standing up. Anchor at bottom center of tile.
-                    const centerPos = project(x + 0.5, y + 0.5, z, viewMode, tileSize);
-                    const baseX = centerPos.x - camera.x;
-                    const baseY = centerPos.y - camera.y;
+            // Top Down 3D
+            this.camera.position.set(x, 50, z);
+            this.camera.lookAt(x, 0, z);
+            // Rotate Z so 'up' is -Z in game (North)
+            this.camera.rotation.z = 0; 
+            this.camera.up.set(0, 0, -1); 
+            this.camera.lookAt(x, 0, z);
+        }
 
-                    if (item.type === 'logs' || item.type === 'bushes') {
-                        // Smaller footprint so they fit inside the isometric diamond
-                        const spriteWidth = tileSize * 0.7;
-                        const spriteHeight = tileSize * 0.55;
-                        const drawX = Math.round(baseX - spriteWidth / 2);
-                        // Adjust logs/bushes so they sit centered in the isometric diamond
-                        const drawY = Math.round(baseY - spriteHeight * 0.5);
-                        ctx.drawImage(image, drawX, drawY, spriteWidth, spriteHeight);
-                    } else {
-                        // Trees: full height but still anchored to tile center
-                        const spriteWidth = tileSize;
-                        const spriteHeight = tileSize;
-                        const drawX = Math.round(baseX - spriteWidth / 2);
-                        const drawY = Math.round(baseY - spriteHeight);
-                        ctx.drawImage(image, drawX, drawY, spriteWidth, spriteHeight);
-                    }
-                } else {
-                    // 2D
-                    if (item.type === 'tree') {
-                        // Offset tree upward by half a tile so trunk sits halfway up the grid cell
-                        const drawY = screenY - tileSize / 2;
-                        ctx.drawImage(image, screenX, drawY, tileSize, tileSize);
-                    } else {
-                        ctx.drawImage(image, screenX, screenY, tileSize, tileSize);
-                    }
+        // Follow shadow light
+        this.dirLight.position.set(x + 20, 50, z + 10);
+        this.dirLight.target.position.set(x, 0, z);
+        this.dirLight.target.updateMatrixWorld();
+    }
+
+    getTexture(img) {
+        if (!img || !img.src) return null;
+        if (!this.textureCache[img.src]) {
+            const tex = new THREE.Texture(img);
+            tex.colorSpace = THREE.SRGBColorSpace;
+            tex.magFilter = THREE.NearestFilter;
+            tex.minFilter = THREE.NearestFilter;
+            tex.needsUpdate = true;
+            this.textureCache[img.src] = tex;
+        }
+        return this.textureCache[img.src];
+    }
+
+    updateTerrain(map) {
+        // Rebuild terrain if dimensions change or it doesn't exist
+        if (!this.terrainMesh || this.terrainMesh.geometry.parameters.width !== map.width || this.terrainMesh.geometry.parameters.height !== map.height) {
+            if (this.terrainMesh) {
+                this.scene.remove(this.terrainMesh);
+                this.terrainMesh.geometry.dispose();
+                this.terrainMesh.material.dispose();
+            }
+
+            // Geometry: Width, Height, SegmentsW, SegmentsH
+            // ThreeJS Plane is created in XY. We rotate it later.
+            // Segments should correspond to map width-1, height-1 to match vertices to grid points
+            const geometry = new THREE.PlaneGeometry(map.width, map.height, map.width - 1, map.height - 1);
+            
+            // Material
+            const grassTex = this.getTexture(map.grassTile);
+            if (grassTex) {
+                grassTex.wrapS = THREE.RepeatWrapping;
+                grassTex.wrapT = THREE.RepeatWrapping;
+                grassTex.repeat.set(map.width, map.height);
+            }
+            
+            const material = new THREE.MeshLambertMaterial({ 
+                map: grassTex,
+                color: 0xddffdd
+            });
+
+            this.terrainMesh = new THREE.Mesh(geometry, material);
+            this.terrainMesh.rotation.x = -Math.PI / 2; // Lay flat
+            // PlaneGeometry is centered. Shift it so (0,0) is top-left to match game coords (0 to Width)
+            // Actually, game coord 0,0 is a grid point.
+            // Plane created with width/height is centered at 0,0.
+            // Top left corner would be -width/2, +height/2 in XY space.
+            // We want corner to be 0,0 in World space.
+            // Let's offset position:
+            this.terrainMesh.position.set(map.width / 2 - 0.5, 0, map.height / 2 - 0.5);
+            this.terrainMesh.receiveShadow = true;
+
+            this.scene.add(this.terrainMesh);
+        }
+
+        // Update heights
+        const positions = this.terrainMesh.geometry.attributes.position;
+        for (let y = 0; y < map.height; y++) {
+            for (let x = 0; x < map.width; x++) {
+                // PlaneGeometry vertices are ordered row by row, from top to bottom (Y decreases)?
+                // Actually PlaneGeometry builds vertices: (0,0), (1,0)... (0,1)... 
+                // Let's verify. Standard PlaneGeometry(w, h, sw, sh) builds row by row.
+                // Vertex index = y * (width+1) + x
+                const index = y * (map.width) + x;
+                const h = map.getHeight(x, y);
+                // Z in Plane geometry local space corresponds to Up in world space when rotated -90 X.
+                positions.setZ(index, h);
+            }
+        }
+        positions.needsUpdate = true;
+        this.terrainMesh.geometry.computeVertexNormals();
+        
+        // Update texture if changed (e.g. asset override)
+        const tex = this.getTexture(map.grassTile);
+        if (tex && this.terrainMesh.material.map !== tex) {
+            tex.wrapS = THREE.RepeatWrapping;
+            tex.wrapT = THREE.RepeatWrapping;
+            tex.repeat.set(map.width, map.height);
+            this.terrainMesh.material.map = tex;
+            this.terrainMesh.material.needsUpdate = true;
+        }
+    }
+
+    createOrUpdateSprite(id, type, x, y, z, image, scale = 1) {
+        let sprite = this.sprites.get(id);
+        const tex = this.getTexture(image);
+        
+        if (!sprite) {
+            const mat = new THREE.SpriteMaterial({ map: tex, transparent: true });
+            sprite = new THREE.Sprite(mat);
+            sprite.center.set(0.5, 0); // Anchor at bottom center
+            this.scene.add(sprite);
+            this.sprites.set(id, sprite);
+        }
+
+        // Update Texture
+        if (sprite.material.map !== tex) {
+            sprite.material.map = tex;
+        }
+
+        // Position
+        sprite.position.set(x, z, y); // Game Y -> 3D Z, Game Z (height) -> 3D Y
+        sprite.scale.set(scale, scale, 1);
+        
+        // Mark as seen this frame (reuse a property or set a timestamp)
+        sprite.userData.lastUpdate = Date.now();
+    }
+    
+    createOrUpdatePlayer(player) {
+        // Generate/Update Canvas Texture for player
+        let canvasData = this.playerCanvases.get(player.id);
+        if (!canvasData) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 128;
+            canvas.height = 128;
+            const tex = new THREE.CanvasTexture(canvas);
+            tex.colorSpace = THREE.SRGBColorSpace;
+            tex.minFilter = THREE.NearestFilter;
+            tex.magFilter = THREE.NearestFilter;
+            canvasData = { canvas, ctx: canvas.getContext('2d'), texture: tex };
+            this.playerCanvases.set(player.id, canvasData);
+        }
+
+        // Render player to 2D canvas
+        const { ctx, canvas, texture } = canvasData;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // Scale context so renderPlayer thinks it's drawing to a 32px tile but on a 128px canvas (high res)
+        ctx.save();
+        ctx.scale(4, 4); 
+        ctx.translate(16, 16); // Center in the 32x32 space
+        // Mock camera offset to 0,0 since we translated
+        renderPlayer(ctx, player, 32, 0, 0, '2d'); 
+        ctx.restore();
+        
+        texture.needsUpdate = true;
+
+        // Create/Update Sprite
+        const id = `p_${player.id}`;
+        let sprite = this.sprites.get(id);
+        if (!sprite) {
+            const mat = new THREE.SpriteMaterial({ map: texture, transparent: true });
+            sprite = new THREE.Sprite(mat);
+            sprite.center.set(0.5, 0.3); // Adjust anchor so feet are on ground (player circle is centered)
+            this.scene.add(sprite);
+            this.sprites.set(id, sprite);
+        }
+        
+        const h = this.terrainMesh ? (this.terrainMesh.geometry.attributes.position.getZ(Math.floor(player.y) * this.terrainMesh.geometry.parameters.width + Math.floor(player.x)) || 0) : 0;
+        // Interpolate Z properly
+        const z = player.z || 0;
+
+        sprite.position.set(player.pixelX, z + 0.5, player.pixelY); // +0.5 for height offset of sprite
+        sprite.scale.set(1.5, 1.5, 1); // Slightly larger player sprite
+        sprite.userData.lastUpdate = Date.now();
+    }
+
+    render(game) {
+        this.updateCamera(game);
+        
+        // Update Terrain if needed
+        // We assume map doesn't change every frame, but check a version flag or something?
+        // For now, just check if heightGrid changed? Expensive.
+        // Let's assume updateTerrain is cheap enough to check texture/geo init, 
+        // but expensive height updates should be explicit. 
+        // We'll just run it once or if explicitly dirtied.
+        this.updateTerrain(game.map); 
+
+        const now = Date.now();
+
+        // Render Players
+        for (const player of game.players.values()) {
+            if (player.isPowered()) {
+                this.createOrUpdatePlayer(player);
+            }
+        }
+
+        // Render Static Objects (Trees, etc) - Iterate grid
+        // Optimization: Only iterate visible chunks or cache these into instanced meshes?
+        // For "retro" feel with < 1000 objects, sprites are okay.
+        
+        // For performance, we should track objects and not scan grid every frame.
+        // But to keep it consistent with 2D renderer logic which scanned:
+        // We will scan the grid.
+        
+        const map = game.map;
+        for (let y = 0; y < map.height; y++) {
+            for (let x = 0; x < map.width; x++) {
+                const tile = map.grid[y][x];
+                const z = map.getHeight(x + 0.5, y + 0.5);
+                
+                if (tile === TILE_TYPE.TREE) {
+                    this.createOrUpdateSprite(`t_${x}_${y}`, 'tree', x + 0.5, y + 0.5, z, map.treeTile, 1.5);
+                } else if (tile === TILE_TYPE.LOGS) {
+                    this.createOrUpdateSprite(`l_${x}_${y}`, 'logs', x + 0.5, y + 0.5, z, map.logsTile, 1);
+                } else if (tile === TILE_TYPE.BUSHES) {
+                    this.createOrUpdateSprite(`b_${x}_${y}`, 'bushes', x + 0.5, y + 0.5, z, map.bushesTile, 1);
+                } else if (tile === TILE_TYPE.FLOWER_PATCH) {
+                    // Flowers are flat in 2D/2.5D, maybe just a decal on terrain?
+                    // Or a small sprite
+                     this.createOrUpdateSprite(`f_${x}_${y}`, 'flowers', x + 0.5, y + 0.5, z, map.flowerPatchTile, 0.8);
                 }
             }
         }
-    }
-}
 
-// Hitboxes and path lines follow similar projection logic updates
-function renderHitboxes(ctx, players, map, camera, settings) {
-    if (!settings.visuals || !settings.visuals.show_hitboxes) return;
-    const viewMode = settings.visuals.view_mode || '2d';
-
-    ctx.save();
-    ctx.strokeStyle = 'rgba(255, 0, 0, 0.8)';
-    ctx.lineWidth = 1;
-
-    const tileSize = map.tileSize;
-
-    // Transform context to map coordinates relative to camera
-    const snappedCameraX = Math.round(camera.x);
-    const snappedCameraY = Math.round(camera.y);
-    ctx.translate(-snappedCameraX, -snappedCameraY);
-
-    if (viewMode === '2.5d') {
-        // Apply isometric ground transform: maps flat grid coordinates to isometric screen coordinates
-        // This squashes and rotates the coordinate system so drawing a circle results in a floor-aligned ellipse
-        ctx.transform(0.5, 0.25, -0.5, 0.25, 0, 0);
-    }
-
-    // --- Player hitboxes ---
-    for (const player of players.values()) {
-        if (!player.isPowered()) continue;
-        const hitbox = getPlayerHitbox(player);
-
-        ctx.beginPath();
-        // Draw circle in flat coordinates; transform handles the view projection
-        ctx.arc(hitbox.x * tileSize, hitbox.y * tileSize, hitbox.radius * tileSize, 0, Math.PI * 2);
-        ctx.stroke();
-    }
-
-    // --- Tree hitboxes (rectangles) ---
-    // Compute visible tile range so we only iterate trees that can be on screen
-    const { drawStartX, drawEndX, drawStartY, drawEndY } = getVisibleTileRange(
-        camera,
-        ctx.canvas,
-        map,
-        viewMode
-    );
-
-    for (let j = drawStartY; j < drawEndY; j++) {
-        for (let i = drawStartX; i < drawEndX; i++) {
-            if (j < 0 || j >= map.height || i < 0 || i >= map.width) continue;
-            if (map.grid[j][i] !== TILE_TYPE.TREE) continue;
-
-            const trunk = getTreeTrunkHitbox(i, j);
-            
-            ctx.beginPath();
-            // Draw circle in flat coordinates; transform handles the view projection
-            ctx.arc(trunk.x * tileSize, trunk.y * tileSize, trunk.radius * tileSize, 0, Math.PI * 2);
-            ctx.stroke();
-        }
-    }
-
-    ctx.restore();
-}
-
-function renderPathingLines(ctx, players, camera, map, settings) {
-    if (!settings.visuals || !settings.visuals.show_pathing_lines) return;
-    const viewMode = settings.visuals.view_mode || '2d';
-
-    ctx.save();
-    ctx.lineWidth = 2;
-    ctx.setLineDash([5, 5]);
-
-    const tileSize = map.tileSize;
-    
-    const isMovingState = (state) => {
-        return state.startsWith('moving_to') || state === PLAYER_STATE.FOLLOWING;
-    };
-
-    for (const player of players.values()) {
-        if (!player.isPowered() || !player.path || player.path.length === 0 || !isMovingState(player.state)) continue;
-
-        const pathColor = player.color || '#FFFFFF';
-        ctx.strokeStyle = pathColor;
-        ctx.globalAlpha = 0.8;
-
-        ctx.beginPath();
-
-        // Player center
-        const pPos = project(player.pixelX + player.offsetX, player.pixelY + player.offsetY, 0, viewMode, tileSize);
-        ctx.moveTo(pPos.x - camera.x, pPos.y - camera.y);
-
-        for (const waypoint of player.path) {
-            const wPos = project(waypoint.x + 0.5, waypoint.y + 0.5, 0, viewMode, tileSize);
-            ctx.lineTo(wPos.x - camera.x, wPos.y - camera.y);
+        // Cleanup stale sprites
+        for (const [id, sprite] of this.sprites) {
+            if (sprite.userData.lastUpdate !== now) {
+                this.scene.remove(sprite);
+                if(sprite.material.map) sprite.material.map.dispose();
+                sprite.material.dispose();
+                this.sprites.delete(id);
+            }
         }
 
-        ctx.stroke();
+        this.renderer.render(this.scene, this.camera);
     }
-
-    ctx.restore();
-}
-
-export function renderGame(game) {
-    const { ctx, canvas, camera, map, players, settings } = game;
-
-    ctx.fillStyle = '#000';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    const tileSize = map.tileSize;
-    const viewMode = settings.visuals.view_mode || '2d';
-    
-    const listenerX = camera.x + canvas.width / 2;
-    const listenerY = camera.y + canvas.height / 2;
-    AudioManager.setListenerPosition(listenerX, listenerY, tileSize);
-    
-    const { drawStartX, drawEndX, drawStartY, drawEndY } = getVisibleTileRange(camera, canvas, map, viewMode);
-    
-    map.renderBase(ctx, camera.x, camera.y, drawStartX, drawEndX, drawStartY, drawEndY, viewMode);
-
-    renderTargetHighlights(ctx, players, camera, tileSize, settings, map);
-
-    renderYSorted(ctx, players, map, drawStartX, drawEndX, drawStartY, drawEndY, tileSize, camera, settings);
-
-    renderHitboxes(ctx, players, map, camera, settings);
-    renderPathingLines(ctx, players, camera, map, settings);
 }
