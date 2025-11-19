@@ -62,6 +62,10 @@ export function getSettingsHTML(worldName, settings) {
                             </select>
                         </div>
                         <div class="setting-item">
+                            <label for="render_distance">Render Distance</label>
+                            <input type="number" id="render_distance" data-path="visuals.render_distance" value="${settings.visuals ? settings.visuals.render_distance : 30}" step="1" min="10" max="100">
+                        </div>
+                        <div class="setting-item">
                             <input type="checkbox" id="show_target_indicator" data-path="visuals.show_target_indicator" ${settings.visuals && settings.visuals.show_target_indicator ? 'checked' : ''}>
                             <label for="show_target_indicator">Show Target Tile Indicator</label>
                         </div>

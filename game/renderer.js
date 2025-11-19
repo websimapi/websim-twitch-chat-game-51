@@ -101,72 +101,66 @@ export class ThreeRenderer {
     }
 
     updateTerrain(map) {
-        // Rebuild terrain if dimensions change or it doesn't exist
-        if (!this.terrainMesh || this.terrainMesh.geometry.parameters.width !== map.width || this.terrainMesh.geometry.parameters.height !== map.height) {
-            if (this.terrainMesh) {
-                this.scene.remove(this.terrainMesh);
-                this.terrainMesh.geometry.dispose();
-                this.terrainMesh.material.dispose();
-            }
-
-            // Geometry: Width, Height, SegmentsW, SegmentsH
-            // ThreeJS Plane is created in XY. We rotate it later.
-            // Segments should correspond to map width-1, height-1 to match vertices to grid points
-            const geometry = new THREE.PlaneGeometry(map.width, map.height, map.width - 1, map.height - 1);
+        // Optimization: Only update terrain if strictly necessary (init or dimensions change)
+        // Updating height of 65k vertices every frame is too slow.
+        if (this.terrainMesh && 
+            this.terrainMesh.geometry.parameters.width === map.width && 
+            this.terrainMesh.geometry.parameters.height === map.height) {
             
-            // Material
-            const grassTex = this.getTexture(map.grassTile);
-            if (grassTex) {
-                grassTex.wrapS = THREE.RepeatWrapping;
-                grassTex.wrapT = THREE.RepeatWrapping;
-                grassTex.repeat.set(map.width, map.height);
+            // Check if texture needs update
+            const tex = this.getTexture(map.grassTile);
+            if (tex && this.terrainMesh.material.map !== tex) {
+                tex.wrapS = THREE.RepeatWrapping;
+                tex.wrapT = THREE.RepeatWrapping;
+                tex.repeat.set(map.width, map.height);
+                this.terrainMesh.material.map = tex;
+                this.terrainMesh.material.needsUpdate = true;
             }
-            
-            const material = new THREE.MeshLambertMaterial({ 
-                map: grassTex,
-                color: 0xddffdd
-            });
-
-            this.terrainMesh = new THREE.Mesh(geometry, material);
-            this.terrainMesh.rotation.x = -Math.PI / 2; // Lay flat
-            // PlaneGeometry is centered. Shift it so (0,0) is top-left to match game coords (0 to Width)
-            // Actually, game coord 0,0 is a grid point.
-            // Plane created with width/height is centered at 0,0.
-            // Top left corner would be -width/2, +height/2 in XY space.
-            // We want corner to be 0,0 in World space.
-            // Let's offset position:
-            this.terrainMesh.position.set(map.width / 2 - 0.5, 0, map.height / 2 - 0.5);
-            this.terrainMesh.receiveShadow = true;
-
-            this.scene.add(this.terrainMesh);
+            return;
         }
 
-        // Update heights
+        if (this.terrainMesh) {
+            this.scene.remove(this.terrainMesh);
+            this.terrainMesh.geometry.dispose();
+            this.terrainMesh.material.dispose();
+        }
+
+        // Geometry: Width, Height, SegmentsW, SegmentsH
+        const geometry = new THREE.PlaneGeometry(map.width, map.height, map.width - 1, map.height - 1);
+        
+        // Material
+        const grassTex = this.getTexture(map.grassTile);
+        if (grassTex) {
+            grassTex.wrapS = THREE.RepeatWrapping;
+            grassTex.wrapT = THREE.RepeatWrapping;
+            grassTex.repeat.set(map.width, map.height);
+        }
+        
+        const material = new THREE.MeshLambertMaterial({ 
+            map: grassTex,
+            color: 0xddffdd
+        });
+
+        this.terrainMesh = new THREE.Mesh(geometry, material);
+        this.terrainMesh.rotation.x = -Math.PI / 2; // Lay flat
+        
+        // Offset to align top-left of map grid (0,0) with world space 0,0
+        this.terrainMesh.position.set(map.width / 2 - 0.5, 0, map.height / 2 - 0.5);
+        this.terrainMesh.receiveShadow = true;
+
+        this.scene.add(this.terrainMesh);
+
+        // Initial height set
         const positions = this.terrainMesh.geometry.attributes.position;
         for (let y = 0; y < map.height; y++) {
             for (let x = 0; x < map.width; x++) {
-                // PlaneGeometry vertices are ordered row by row, from top to bottom (Y decreases)?
-                // Actually PlaneGeometry builds vertices: (0,0), (1,0)... (0,1)... 
-                // Let's verify. Standard PlaneGeometry(w, h, sw, sh) builds row by row.
-                // Vertex index = y * (width+1) + x
                 const index = y * (map.width) + x;
                 const h = map.getHeight(x, y);
-                // Z in Plane geometry local space corresponds to Up in world space when rotated -90 X.
                 positions.setZ(index, h);
             }
         }
         positions.needsUpdate = true;
         this.terrainMesh.geometry.computeVertexNormals();
-        
-        // Update texture if changed (e.g. asset override)
-        const tex = this.getTexture(map.grassTile);
-        if (tex && this.terrainMesh.material.map !== tex) {
-            tex.wrapS = THREE.RepeatWrapping;
-            tex.wrapT = THREE.RepeatWrapping;
-            tex.repeat.set(map.width, map.height);
-            this.terrainMesh.material.map = tex;
-            this.terrainMesh.material.needsUpdate = true;
-        }
     }
 
     createOrUpdateSprite(id, type, x, y, z, image, scale = 1) {
@@ -190,7 +184,7 @@ export class ThreeRenderer {
         sprite.position.set(x, z, y); // Game Y -> 3D Z, Game Z (height) -> 3D Y
         sprite.scale.set(scale, scale, 1);
         
-        // Mark as seen this frame (reuse a property or set a timestamp)
+        // Mark as seen this frame
         sprite.userData.lastUpdate = Date.now();
     }
     
@@ -234,8 +228,7 @@ export class ThreeRenderer {
             this.sprites.set(id, sprite);
         }
         
-        const h = this.terrainMesh ? (this.terrainMesh.geometry.attributes.position.getZ(Math.floor(player.y) * this.terrainMesh.geometry.parameters.width + Math.floor(player.x)) || 0) : 0;
-        // Interpolate Z properly
+        // Player uses z + 0.5 to prevent clipping and look nice
         const z = player.z || 0;
 
         sprite.position.set(player.pixelX, z + 0.5, player.pixelY); // +0.5 for height offset of sprite
@@ -246,12 +239,7 @@ export class ThreeRenderer {
     render(game) {
         this.updateCamera(game);
         
-        // Update Terrain if needed
-        // We assume map doesn't change every frame, but check a version flag or something?
-        // For now, just check if heightGrid changed? Expensive.
-        // Let's assume updateTerrain is cheap enough to check texture/geo init, 
-        // but expensive height updates should be explicit. 
-        // We'll just run it once or if explicitly dirtied.
+        // Only update terrain geometry on init or changes, not every frame
         this.updateTerrain(game.map); 
 
         const now = Date.now();
@@ -263,18 +251,23 @@ export class ThreeRenderer {
             }
         }
 
-        // Render Static Objects (Trees, etc) - Iterate grid
-        // Optimization: Only iterate visible chunks or cache these into instanced meshes?
-        // For "retro" feel with < 1000 objects, sprites are okay.
-        
-        // For performance, we should track objects and not scan grid every frame.
-        // But to keep it consistent with 2D renderer logic which scanned:
-        // We will scan the grid.
-        
+        // Render Static Objects (Trees, etc) 
+        // Optimization: Only iterate visible chunks
         const map = game.map;
-        for (let y = 0; y < map.height; y++) {
-            for (let x = 0; x < map.width; x++) {
+        const camX = Math.floor(game.camera.x);
+        const camY = Math.floor(game.camera.y); // Camera Y is map Y (depth)
+        const renderDist = game.settings.visuals.render_distance || 30;
+
+        const minX = Math.max(0, camX - renderDist);
+        const maxX = Math.min(map.width, camX + renderDist);
+        const minY = Math.max(0, camY - renderDist);
+        const maxY = Math.min(map.height, camY + renderDist);
+
+        for (let y = minY; y < maxY; y++) {
+            for (let x = minX; x < maxX; x++) {
                 const tile = map.grid[y][x];
+                if (tile === TILE_TYPE.GRASS) continue; // Skip empty tiles
+
                 const z = map.getHeight(x + 0.5, y + 0.5);
                 
                 if (tile === TILE_TYPE.TREE) {
@@ -284,14 +277,16 @@ export class ThreeRenderer {
                 } else if (tile === TILE_TYPE.BUSHES) {
                     this.createOrUpdateSprite(`b_${x}_${y}`, 'bushes', x + 0.5, y + 0.5, z, map.bushesTile, 1);
                 } else if (tile === TILE_TYPE.FLOWER_PATCH) {
-                    // Flowers are flat in 2D/2.5D, maybe just a decal on terrain?
-                    // Or a small sprite
                      this.createOrUpdateSprite(`f_${x}_${y}`, 'flowers', x + 0.5, y + 0.5, z, map.flowerPatchTile, 0.8);
                 }
             }
         }
 
         // Cleanup stale sprites
+        // Only run cleanup occasionally to avoid checking thousands of sprites every frame?
+        // Actually, iteration over map keys is fast enough for < 5000 objects.
+        // If world is huge, this might need optimization, but with render_distance, visible count is low.
+        // We must ensure invisible sprites are removed so they don't clog up the scene.
         for (const [id, sprite] of this.sprites) {
             if (sprite.userData.lastUpdate !== now) {
                 this.scene.remove(sprite);
