@@ -7,6 +7,10 @@ export class MapRenderer {
         this.map = map;
         // Cached pattern for tiling the grass texture over the height mesh
         this.grassPattern = null;
+        // Track the tileSize used to build the pattern so we can rebuild on zoom changes
+        this.grassPatternTileSize = null;
+        // Offscreen canvas used to scale the grass texture to the current tile size
+        this.grassPatternCanvas = null;
     }
 
     getTallObjects(drawStartX, drawEndX, drawStartY, drawEndY) {
@@ -50,12 +54,28 @@ export class MapRenderer {
 
         // Ensure we have a repeating pattern for the grass texture (used in 2.5D mesh fill)
         if (viewMode === '2.5d') {
-            if (!this.grassPattern) {
-                // Use no-repeat smoothing for crisp pixels
-                const prevSmoothing = ctx.imageSmoothingEnabled;
-                ctx.imageSmoothingEnabled = false;
-                this.grassPattern = ctx.createPattern(this.map.grassTile, 'repeat');
-                ctx.imageSmoothingEnabled = prevSmoothing;
+            // (Re)build pattern whenever tileSize changes so one repeat maps to one grid tile
+            if (!this.grassPattern || this.grassPatternTileSize !== ts) {
+                this.grassPatternTileSize = ts;
+
+                // Create / reuse offscreen canvas sized to current tileSize
+                if (!this.grassPatternCanvas) {
+                    this.grassPatternCanvas = document.createElement('canvas');
+                }
+                const off = this.grassPatternCanvas;
+                off.width = ts;
+                off.height = ts;
+
+                const offCtx = off.getContext('2d');
+                // Disable smoothing for crisp pixels when scaling the source tile
+                const prevSmoothing = offCtx.imageSmoothingEnabled;
+                offCtx.imageSmoothingEnabled = false;
+                offCtx.clearRect(0, 0, ts, ts);
+                // Draw the base grass tile stretched/shrunk to exactly one grid tile
+                offCtx.drawImage(this.map.grassTile, 0, 0, ts, ts);
+                offCtx.imageSmoothingEnabled = prevSmoothing;
+
+                this.grassPattern = ctx.createPattern(off, 'repeat');
             }
         }
 
@@ -99,25 +119,19 @@ export class MapRenderer {
                     ctx.clip();
 
                     if (this.grassPattern) {
-                        // Fill with repeating grass texture; align pattern roughly to world grid
+                        // Fill with repeating grass texture; pattern cell already matches one grid tile
                         ctx.fillStyle = this.grassPattern;
 
-                        // Compute a conservative bounding box in screen space for this quad
+                        // Conservative bounding box for this quad
                         const minX = Math.min(p00.x, p10.x, p11.x, p01.x);
                         const maxX = Math.max(p00.x, p10.x, p11.x, p01.x);
                         const minY = Math.min(p00.y, p10.y, p11.y, p01.y);
                         const maxY = Math.max(p00.y, p10.y, p11.y, p01.y);
 
-                        // Offset the fill rect so pattern phase is stable between tiles
-                        // Use projected position of the tile origin at z=0 as a reference
-                        const base = project(i, j, 0, viewMode, ts);
-                        const phaseX = base.x % ts;
-                        const phaseY = base.y % (ts * 0.5); // iso tiles are shorter vertically
-
-                        const drawX = Math.floor(minX - phaseX - ts);
-                        const drawY = Math.floor(minY - phaseY - ts);
-                        const drawW = Math.ceil((maxX - minX) + ts * 3);
-                        const drawH = Math.ceil((maxY - minY) + ts * 3);
+                        const drawX = Math.floor(minX) - ts;
+                        const drawY = Math.floor(minY) - ts;
+                        const drawW = Math.ceil((maxX - minX) + ts * 2);
+                        const drawH = Math.ceil((maxY - minY) + ts * 2);
 
                         ctx.fillRect(drawX, drawY, drawW, drawH);
                     } else {
