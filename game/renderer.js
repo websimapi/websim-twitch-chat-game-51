@@ -43,6 +43,34 @@ export class ThreeRenderer {
 
         // New: frame counter to track which sprites are used each render
         this.frameId = 0;
+
+        // NEW: icons for chop / gather indicator in label
+        this.icons = {
+            woodcutting: null,
+            gathering: null,
+        };
+        this.iconsLoaded = false;
+        this._loadIcons();
+    }
+
+    // NEW: helper to load icons for label timer indicator
+    _loadIcons() {
+        if (this.iconsLoaded) return;
+        const loadImg = (src) => new Promise((resolve) => {
+            const img = new Image();
+            img.src = src;
+            img.onload = () => resolve(img);
+            img.onerror = () => resolve(null);
+        });
+        Promise.all([
+            loadImg('./woodcutting_icon.png'),
+            loadImg('./gathering_icon.png'),
+        ]).then(([woodcutting, gathering]) => {
+            this.icons.woodcutting = woodcutting;
+            this.icons.gathering = gathering;
+            this.iconsLoaded = true;
+            console.log('ThreeRenderer label icons loaded.');
+        });
     }
 
     resize(game) {
@@ -122,23 +150,34 @@ export class ThreeRenderer {
         return entry;
     }
 
+    // NEW: small helper to decide which icon to show based on player state
+    getPlayerSkillIcon(player) {
+        if (!this.iconsLoaded) return null;
+        // Chopping = woodcutting icon
+        if (player.state === 'chopping') {
+            return this.icons.woodcutting;
+        }
+        // Any harvesting = gathering icon
+        if (
+            player.state === 'harvesting_logs' ||
+            player.state === 'harvesting_bushes' ||
+            player.state === 'harvesting_flowers'
+        ) {
+            return this.icons.gathering;
+        }
+        return null;
+    }
+
     // Draw username, energy bar, and action timer indicator into the label canvas
-    drawPlayerLabel(player, ctx) {
-        const canvas = ctx.canvas;
+    drawPlayerLabel(player, labelEntry) {
+        const ctx = labelEntry.ctx;
+        const canvas = labelEntry.canvas;
         const w = canvas.width;
         const h = canvas.height;
         ctx.clearRect(0, 0, w, h);
 
-        // Background for readability
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-        const bgWidth = w * 0.9;
-        const bgHeight = h * 0.65;
-        const bgX = (w - bgWidth) / 2;
-        const bgY = (h - bgHeight) / 2;
-        ctx.fillRect(bgX, bgY, bgWidth, bgHeight);
-
         // Username
-        const nameY = bgY + bgHeight * 0.3;
+        const nameY = h * 0.4; // Slightly higher, closer to sphere
         ctx.font = '20px Arial, sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'bottom';
@@ -148,14 +187,15 @@ export class ThreeRenderer {
         ctx.strokeText(player.username, w / 2, nameY);
         ctx.fillText(player.username, w / 2, nameY);
 
-        // Energy bar (similar to 2D, but simplified to rectangle segments)
+        // Energy bar (narrower, no background container)
         const energy = player.energy;
         const maxSlots = 12;
         if (energy && energy.timestamps && energy.timestamps.length > 0) {
-            const barWidth = bgWidth * 0.9;
-            const barHeight = 10;
+            // Make bar noticeably narrower than before
+            const barWidth = w * 0.45;
+            const barHeight = 8;
             const barX = (w - barWidth) / 2;
-            const barY = nameY + 6;
+            const barY = nameY + 4;
 
             const filledSlots = Math.min(maxSlots, energy.timestamps.length);
             const slotWidth = barWidth / maxSlots;
@@ -167,8 +207,8 @@ export class ThreeRenderer {
                 ctx.strokeRect(Math.round(x) + 0.5, Math.round(barY) + 0.5, Math.floor(slotWidth) - 1, barHeight);
 
                 if (i < filledSlots) {
-                    // Current draining cell (leftmost)
                     if (i === 0) {
+                        // draining cell
                         const width = slotWidth * remainingRatio;
                         const alpha = 0.6 + (energy.flashState || 0) * 0.4;
                         ctx.fillStyle = `rgba(173,216,230,${alpha})`;
@@ -178,29 +218,28 @@ export class ThreeRenderer {
                         ctx.fillRect(Math.round(x) + 1, barY + 1, Math.floor(slotWidth) - 2, barHeight - 2);
                     }
                 } else {
-                    // Empty slot
                     ctx.fillStyle = 'rgba(173,216,230,0.25)';
                     ctx.fillRect(Math.round(x) + 1, barY + 1, Math.floor(slotWidth) - 2, barHeight - 2);
                 }
             }
         }
 
-        // Action timer circle indicator to the left of name
+        // Action timer circle indicator with icon inside
         const total = player.actionTotalTime || 0;
         const remaining = player.actionTimer || 0;
         if (total > 0 && remaining > 0) {
             const progress = Math.min(1, Math.max(0, (total - remaining) / total));
-            const radius = 12;
-            const centerX = bgX + radius + 6;
-            const centerY = nameY - 10;
+            const radius = 14;
+            const centerX = w * 0.18; // a bit left of center
+            const centerY = nameY - 6;
 
-            // Background circle
+            // Background circle (lighter so it's less heavy)
             ctx.beginPath();
-            ctx.fillStyle = 'rgba(0,0,0,0.7)';
+            ctx.fillStyle = 'rgba(0,0,0,0.5)';
             ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
             ctx.fill();
 
-            // Icon color based on progress
+            // Choose color for progress arc
             let color;
             if (progress < 0.33) {
                 color = `rgb(255, ${Math.floor(255 * (progress / 0.33))}, 0)`; // Red -> Orange
@@ -210,14 +249,24 @@ export class ThreeRenderer {
                 color = 'rgb(0, 255, 0)'; // Green
             }
 
-            // Progress arc
             const startAngle = -Math.PI / 2;
             const endAngle = startAngle + progress * Math.PI * 2;
+
+            // Progress arc
             ctx.beginPath();
             ctx.strokeStyle = color;
             ctx.lineWidth = 3;
             ctx.arc(centerX, centerY, radius - 2, startAngle, endAngle);
             ctx.stroke();
+
+            // Draw icon inside circle if available
+            const icon = this.getPlayerSkillIcon(player);
+            if (icon) {
+                const iconSize = radius * 1.3;
+                const iconX = centerX - iconSize / 2;
+                const iconY = centerY - iconSize / 2;
+                ctx.drawImage(icon, iconX, iconY, iconSize, iconSize);
+            }
         }
     }
 
@@ -343,7 +392,7 @@ export class ThreeRenderer {
         let labelSprite = this.sprites.get(labelId);
 
         const labelCanvasEntry = this.getPlayerLabelCanvas(player.id);
-        this.drawPlayerLabel(player, labelCanvasEntry.ctx);
+        this.drawPlayerLabel(player, labelCanvasEntry);
         labelCanvasEntry.texture.needsUpdate = true;
 
         if (!labelSprite) {
@@ -362,8 +411,8 @@ export class ThreeRenderer {
             labelSprite.material.map = labelCanvasEntry.texture;
         }
 
-        // Position label slightly above the sphere
-        const labelHeightWorld = 1.2;
+        // Position label slightly above the sphere (closer than before)
+        const labelHeightWorld = 0.7; // was 1.2, bring label closer to player
         labelSprite.position.set(
             mesh.position.x,
             mesh.position.y + labelHeightWorld,
