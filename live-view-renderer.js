@@ -37,7 +37,7 @@ export class LiveViewRenderer {
         this.assets = {};
         this.state = null;
         this.animationFrameId = null;
-        this.viewMode = '2d'; // '2d' or '2.5d'
+        this.viewMode = '2.5d'; // fixed 3D/2.5D style
 
         // Zoom controls (similar to host camera)
         this.baseTileSize = 32;
@@ -72,9 +72,8 @@ export class LiveViewRenderer {
     }
 
     setViewMode(mode) {
-        if (mode === '2d' || mode === '2.5d') {
-            this.viewMode = mode;
-        }
+        // Keep API for compatibility but always use 2.5D mode
+        this.viewMode = '2.5d';
     }
 
     // New: handle zoom via mouse wheel
@@ -130,7 +129,7 @@ export class LiveViewRenderer {
         // Use zoomed tile size similar to host camera
         const ts = this.baseTileSize * this.zoom;
         this.tileSize = ts;
-        const viewMode = this.viewMode;
+        const viewMode = '2.5d';
 
         // Compute camera based on view mode
         let cameraX, cameraY;
@@ -196,40 +195,7 @@ export class LiveViewRenderer {
                 ctx.restore();
             } else {
                 // 2D top-down (existing behavior)
-                for (let j = 0; j < mapChunk.grid.length; j++) {
-                    for (let i = 0; i < mapChunk.grid[j].length; i++) {
-                        const tileType = mapChunk.grid[j][i];
-                        if (tileType === null) continue;
-
-                        const worldX = mapChunk.origin.x + i;
-                        const worldY = mapChunk.origin.y + j;
-
-                        const screenX = Math.round(worldX * ts - cameraX);
-                        const screenY = Math.round(worldY * ts - cameraY);
-
-                        // Slightly overlap tiles to hide any subpixel gaps
-                        const drawX = screenX - 0.5;
-                        const drawY = screenY - 0.5;
-                        ctx.drawImage(this.assets.grass, drawX, drawY, ts + 1, ts + 1);
-
-                        let objectImage = null;
-                        if (tileType === TILE_TYPE.LOGS) objectImage = this.assets.logs;
-                        else if (tileType === TILE_TYPE.BUSHES) objectImage = this.assets.bushes;
-                        else if (tileType === TILE_TYPE.FLOWER_PATCH) objectImage = this.assets.flowers;
-
-                        if (objectImage) {
-                            // Make flowers slightly smaller so they don't appear zoomed in
-                            if (tileType === TILE_TYPE.FLOWER_PATCH) {
-                                const flowerSize = ts * 0.7;
-                                const flowerX = drawX + (ts - flowerSize) / 2;
-                                const flowerY = drawY + (ts - flowerSize) / 2;
-                                ctx.drawImage(objectImage, flowerX, flowerY, flowerSize, flowerSize);
-                            } else {
-                                ctx.drawImage(objectImage, drawX, drawY, ts + 1, ts + 1);
-                            }
-                        }
-                    }
-                }
+                // (not used anymore, kept for safety)
             }
         }
 

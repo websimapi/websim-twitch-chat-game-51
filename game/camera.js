@@ -49,6 +49,15 @@ export class Camera {
         console.log(`Camera orbit angle: ${this.orbitAngle.toFixed(1)}°`);
     }
 
+    // Pan the camera focus by a world-space delta in grid units
+    pan(dx, dy) {
+        this.x += dx;
+        this.y += dy;
+        // Clamp to map bounds
+        this.x = Math.max(0, Math.min(this.map.width, this.x));
+        this.y = Math.max(0, Math.min(this.map.height, this.y));
+    }
+
     update(deltaTime) {
         this.focusTimer -= deltaTime;
         if (this.focusTimer <= 0) {

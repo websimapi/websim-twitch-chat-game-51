@@ -60,16 +60,47 @@ export class Game {
             this.camera.handleWheel(e.deltaY);
         }, { passive: false });
 
-        // NEW: middle mouse drag to orbit camera (isometric view)
-        this._isOrbitDragging = false;
-        this._lastOrbitDragX = 0;
+        // Middle mouse drag to pan camera focus (world position)
+        this._isPanning = false;
+        this._lastPanX = 0;
+        this._lastPanY = 0;
+
+        this.container.addEventListener('mousedown', (e) => {
+            // Middle mouse button is usually button === 1
+            if (e.button === 1) {
+                e.preventDefault();
+                this._isPanning = true;
+                this._lastPanX = e.clientX;
+                this._lastPanY = e.clientY;
+            }
+        });
+
+        window.addEventListener('mouseup', (e) => {
+            if (e.button === 1) {
+                this._isPanning = false;
+            }
+        });
+
+        this.container.addEventListener('mouseleave', () => {
+            this._isPanning = false;
+        });
+
         this.container.addEventListener('mousemove', (e) => {
-            if (!this._isOrbitDragging) return;
-            const dx = e.clientX - this._lastOrbitDragX;
-            this._lastOrbitDragX = e.clientX;
-            // Sensitivity: negative to match drag direction
-            const sensitivity = 0.3;
-            this.camera.adjustOrbit(-dx * sensitivity);
+            if (!this._isPanning) return;
+            const dx = e.clientX - this._lastPanX;
+            const dy = e.clientY - this._lastPanY;
+            this._lastPanX = e.clientX;
+            this._lastPanY = e.clientY;
+
+            // Convert screen-space delta to world-space delta based on current zoom
+            const viewHeight = this.camera.zoom; // world units (grid units)
+            const aspect = window.innerWidth / window.innerHeight;
+            const viewWidth = viewHeight * aspect;
+
+            const worldDx = -dx / window.innerWidth * viewWidth;
+            const worldDy = dy / window.innerHeight * viewHeight;
+
+            this.camera.pan(worldDx, worldDy);
         });
         
         this.saveInterval = setInterval(async () => {

@@ -75,9 +75,6 @@ function renderUI(state, data = {}) {
             break;
         case STATUS.LINKED:
             content = `
-                <button id="live-view-toggle-view-btn">
-                    ${liveViewMode === '2.5d' ? '2.5D View' : '2D View'}
-                </button>
                 <div class="live-view-inventory-panel inventory-display">
                     <div class="inventory-item">
                         <span class="label" id="inventory-owner-label">${data.username || 'Your'}'s Inventory</span>
@@ -123,18 +120,6 @@ function renderUI(state, data = {}) {
     if (requestBtn) {
         requestBtn.addEventListener('click', () => {
             requestLink();
-        });
-    }
-
-    const toggleBtn = document.getElementById('live-view-toggle-view-btn');
-    if (toggleBtn) {
-        toggleBtn.addEventListener('click', () => {
-            liveViewMode = liveViewMode === '2d' ? '2.5d' : '2d';
-            if (liveViewRenderer) {
-                liveViewRenderer.setViewMode(liveViewMode);
-            }
-            // Re-render overlay button label
-            renderUI(STATUS.LINKED, { username: data.username || 'Your' });
         });
     }
 }
@@ -215,6 +200,8 @@ async function requestLink() {
 }
 
 export async function initRemoteInventory() {
+    // Live view will always render in 3D/2.5D mode
+    let liveViewMode = '2.5d';
     renderUI(STATUS.INITIAL);
 
     DOM.remoteInventoryContainer.addEventListener('click', (e) => {
