@@ -15,6 +15,7 @@ import { updateActiveChopping } from './game/chopping-manager.js';
 // New imports for refactored logic
 import { initRealtimeHost, sendLiveViewUpdate } from './game/realtime.js';
 import { handlePlayerCommand as handlePlayerCommandImpl } from './game/commands.js';
+import { TILE_TYPE } from './map-tile-types.js'; // NEW: for tree/flower checks
 
 export class Game {
     constructor(canvas, channel, worldName = 'default', hosts = [], settings = DEFAULT_GAME_SETTINGS) {
@@ -86,6 +87,29 @@ export class Game {
             }
         } else {
             this.map.generateMap();
+        }
+
+        // NEW: Ensure newly created / legacy worlds always have some trees and flowers
+        let hasTree = false;
+        let hasFlowers = false;
+        for (let j = 0; j < this.map.height; j++) {
+            const row = this.map.grid[j];
+            if (!row) continue;
+            for (let i = 0; i < this.map.width; i++) {
+                const t = row[i];
+                if (t === TILE_TYPE.TREE) hasTree = true;
+                if (t === TILE_TYPE.FLOWER_PATCH) hasFlowers = true;
+                if (hasTree && hasFlowers) break;
+            }
+            if (hasTree && hasFlowers) break;
+        }
+        if (!hasTree) {
+            console.log('No trees detected in world map; generating tree distribution.');
+            this.map.regenerateTrees();
+        }
+        if (!hasFlowers) {
+            console.log('No flower patches detected in world map; generating flower distribution.');
+            this.map.regenerateFlowers();
         }
 
         if (gameState.players) {

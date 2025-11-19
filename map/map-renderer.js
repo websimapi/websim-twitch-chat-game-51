@@ -90,6 +90,7 @@ export class MapRenderer {
             for (let i = safeStartX; i < safeEndX; i++) {
                 // Sample height at tile center so slopes are smooth
                 const h = this.map.getHeight(i + 0.5, j + 0.5);
+                const tileType = this.map.grid[j][i]; // NEW: reuse tile type in both modes
                 
                 const pos = project(i, j, h, viewMode, ts);
                 
@@ -134,6 +135,11 @@ export class MapRenderer {
                         const drawH = Math.ceil((maxY - minY) + ts * 2);
 
                         ctx.fillRect(drawX, drawY, drawW, drawH);
+
+                        // NEW: overlay flower patch texture flat on the same quad so it conforms to the slope
+                        if (tileType === TILE_TYPE.FLOWER_PATCH && this.map.flowerPatchTile && this.map.flowerPatchTile.complete) {
+                            ctx.drawImage(this.map.flowerPatchTile, drawX, drawY, drawW, drawH);
+                        }
                     } else {
                         // Fallback flat color if pattern is unavailable
                         const avgH = (h00 + h10 + h11 + h01) * 0.25;
@@ -145,22 +151,13 @@ export class MapRenderer {
                     }
                     ctx.restore();
 
-                    // Overlay flowers on top of the sloped ground
-                    const tileType = this.map.grid[j][i];
-                    if (tileType === TILE_TYPE.FLOWER_PATCH && this.map.flowerPatchTile && this.map.flowerPatchTile.complete) {
-                        const centerPos = project(i + 0.5, j + 0.5, h, viewMode, ts);
-                        const spriteSize = ts * 0.75;
-                        const drawX = centerPos.x - spriteSize / 2;
-                        const drawY = centerPos.y - spriteSize / 2;
-                        ctx.drawImage(this.map.flowerPatchTile, drawX, drawY, spriteSize, spriteSize);
-                    }
+                    // REMOVED OLD 2.5D flower sprite overlay here to avoid misaligned billboards
 
                 } else {
                     // 2D
                     const drawX = i * ts;
                     const drawY = j * ts;
                     ctx.drawImage(this.map.grassTile, drawX, drawY, ts, ts);
-                    const tileType = this.map.grid[j][i];
                     if (tileType === TILE_TYPE.FLOWER_PATCH && this.map.flowerPatchTile && this.map.flowerPatchTile.complete) {
                         ctx.drawImage(this.map.flowerPatchTile, drawX, drawY, ts, ts);
                     }
