@@ -139,7 +139,7 @@ function renderYSorted(ctx, players, map, drawStartX, drawEndX, drawStartY, draw
                 type: 'player',
                 // In 2.5D, Z-sort is based on diagonal depth (x+y).
                 // project() doesn't return depth, so we calculate sort key manually.
-                depth: getSortDepth(player.pixelX, player.pixelY, 0, viewMode),
+                depth: getSortDepth(player.pixelX, player.pixelY, 0, viewMode) + 0.5, // Ensure players render above ground objects
                 entity: player,
             });
         }

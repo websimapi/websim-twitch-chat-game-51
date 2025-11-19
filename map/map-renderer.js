@@ -138,7 +138,13 @@ export class MapRenderer {
 
                         // NEW: overlay flower patch texture flat on the same quad so it conforms to the slope
                         if (tileType === TILE_TYPE.FLOWER_PATCH && this.map.flowerPatchTile && this.map.flowerPatchTile.complete) {
-                            ctx.drawImage(this.map.flowerPatchTile, drawX, drawY, drawW, drawH);
+                            // Draw flowers at a per-tile scale instead of stretching across the whole quad
+                            // Position roughly at the quad center to keep them visually aligned with the tile
+                            const centerX = (p00.x + p10.x + p11.x + p01.x) / 4;
+                            const centerY = (p00.y + p10.y + p11.y + p01.y) / 4;
+                            const flowerDrawX = Math.round(centerX - ts / 2);
+                            const flowerDrawY = Math.round(centerY - ts / 2);
+                            ctx.drawImage(this.map.flowerPatchTile, flowerDrawX, flowerDrawY, ts, ts);
                         }
                     } else {
                         // Fallback flat color if pattern is unavailable

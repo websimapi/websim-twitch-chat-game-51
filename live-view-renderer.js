@@ -227,7 +227,7 @@ export class LiveViewRenderer {
         // Main player
         renderList.push({
             type: 'player',
-            depth: getSortDepth(mainPlayer.pixelX, mainPlayer.pixelY, 0, viewMode),
+            depth: getSortDepth(mainPlayer.pixelX, mainPlayer.pixelY, 0, viewMode) + 0.5, // Players above ground objects
             entity: mainPlayer
         });
 
@@ -237,7 +237,7 @@ export class LiveViewRenderer {
                 const p = new MockPlayer(pState);
                 renderList.push({
                     type: 'player',
-                    depth: getSortDepth(p.pixelX, p.pixelY, 0, viewMode),
+                    depth: getSortDepth(p.pixelX, p.pixelY, 0, viewMode) + 0.5, // Players above ground objects
                     entity: p
                 });
             });
