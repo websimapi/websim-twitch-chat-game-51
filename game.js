@@ -59,6 +59,18 @@ export class Game {
             e.preventDefault();
             this.camera.handleWheel(e.deltaY);
         }, { passive: false });
+
+        // NEW: middle mouse drag to orbit camera (isometric view)
+        this._isOrbitDragging = false;
+        this._lastOrbitDragX = 0;
+        this.container.addEventListener('mousemove', (e) => {
+            if (!this._isOrbitDragging) return;
+            const dx = e.clientX - this._lastOrbitDragX;
+            this._lastOrbitDragX = e.clientX;
+            // Sensitivity: negative to match drag direction
+            const sensitivity = 0.3;
+            this.camera.adjustOrbit(-dx * sensitivity);
+        });
         
         this.saveInterval = setInterval(async () => {
             await StorageManager.saveGameState(this.channel, this.worldName, this.players, this.map, this.assets, this.generatedAssets);
@@ -131,6 +143,18 @@ export class Game {
         if (e.code === 'Space') {
             e.preventDefault();
             this.camera.switchToNextPlayerFocus();
+        } else if (e.code === 'ArrowLeft') {
+            // Rotate camera left around focused player in isometric mode
+            e.preventDefault();
+            if (this.settings.visuals.view_mode === 'isometric') {
+                this.camera.adjustOrbit(-this.camera.orbitSpeedDegPerStep);
+            }
+        } else if (e.code === 'ArrowRight') {
+            // Rotate camera right around focused player in isometric mode
+            e.preventDefault();
+            if (this.settings.visuals.view_mode === 'isometric') {
+                this.camera.adjustOrbit(this.camera.orbitSpeedDegPerStep);
+            }
         }
     }
 

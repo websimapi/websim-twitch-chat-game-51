@@ -17,6 +17,10 @@ export class Camera {
         this.zoom = 20; // View height in grid units
         this.minZoom = 5;
         this.maxZoom = 60;
+
+        // NEW: orbit angle around focused point (degrees), used by isometric camera
+        this.orbitAngle = 45; // default isometric angle
+        this.orbitSpeedDegPerStep = 5;
     }
 
     setFocus(playerId) {
@@ -36,6 +40,13 @@ export class Camera {
             this.zoom = Math.min(this.maxZoom, this.zoom + zoomStep);
         }
         console.log(`Camera zoom (view height): ${this.zoom}`);
+    }
+
+    // NEW: adjust orbit angle (in degrees), used by keyboard and mouse drag
+    adjustOrbit(deltaDegrees) {
+        this.orbitAngle = (this.orbitAngle + deltaDegrees) % 360;
+        if (this.orbitAngle < 0) this.orbitAngle += 360;
+        console.log(`Camera orbit angle: ${this.orbitAngle.toFixed(1)}°`);
     }
 
     update(deltaTime) {

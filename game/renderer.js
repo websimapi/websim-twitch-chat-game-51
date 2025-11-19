@@ -96,24 +96,30 @@ export class ThreeRenderer {
         const x = cam.x;
         const z = cam.y; // Game Y is 3D Z
 
-        const viewMode = game.settings.visuals.view_mode || '2d';
+        const viewMode = game.settings.visuals.view_mode || 'top-down';
         
-        if (viewMode === '2.5d' || viewMode === 'isometric') {
-            // Isometric-ish angle
-            this.camera.position.set(x + 20, 20, z + 20); // Offset
+        if (viewMode === 'isometric') {
+            // Isometric-ish angle that orbits around the focused player
+            const angleRad = (cam.orbitAngle * Math.PI) / 180;
+            const radius = 30;
+            const height = 20;
+
+            const camX = x + Math.cos(angleRad) * radius;
+            const camZ = z + Math.sin(angleRad) * radius;
+
+            this.camera.position.set(camX, height, camZ);
+            this.camera.up.set(0, 1, 0); // standard Y-up
             this.camera.lookAt(x, 0, z);
         } else {
-            // Top Down 3D
-            this.camera.position.set(x, 50, z);
-            this.camera.lookAt(x, 0, z);
-            // Rotate Z so 'up' is -Z in game (North)
-            this.camera.rotation.z = 0; 
+            // Top Down 3D, directly above the player focus
+            const height = 50;
+            this.camera.position.set(x, height, z);
             this.camera.up.set(0, 0, -1); 
             this.camera.lookAt(x, 0, z);
         }
 
-        // Follow shadow light
-        this.dirLight.position.set(x + 20, 50, z + 10);
+        // Follow shadow light roughly from above/side
+        this.dirLight.position.set(this.camera.position.x + 10, this.camera.position.y + 20, this.camera.position.z + 10);
         this.dirLight.target.position.set(x, 0, z);
         this.dirLight.target.updateMatrixWorld();
     }
