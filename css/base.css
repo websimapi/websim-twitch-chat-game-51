@@ -1,0 +1,107 @@
+/* Base layout and common UI */
+
+body, html {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background-color: #1a1a1a;
+    color: #f0f0f0;
+    font-family: sans-serif;
+}
+
+.hidden {
+    display: none !important;
+}
+
+#main-container {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: stretch;
+    height: 100%;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+#view-tabs {
+    display: flex;
+    margin-bottom: 20px;
+    background-color: #2a2a2a;
+    border-radius: 8px;
+    padding: 5px;
+}
+
+.tab-btn {
+    padding: 10px 20px;
+    font-size: 16px;
+    border: none;
+    background-color: transparent;
+    color: #aaa;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: background-color 0.2s, color 0.2s;
+}
+
+.tab-btn.active {
+    background-color: #5a3e8d;
+    color: white;
+    font-weight: bold;
+}
+
+.tab-content {
+    width: 100%;
+    max-width: 500px;
+}
+
+/* Connect / Play tab */
+
+#connect-container {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    padding: 20px;
+    box-sizing: border-box;
+}
+
+#connect-container h1 {
+    margin-bottom: 10px;
+}
+
+#connect-container p {
+    margin-bottom: 20px;
+    color: #aaa;
+}
+
+.input-group {
+    display: flex;
+}
+
+#channel-input {
+    padding: 10px;
+    font-size: 16px;
+    border: 1px solid #444;
+    background-color: #333;
+    color: #f0f0f0;
+    border-radius: 5px 0 0 5px;
+    outline: none;
+}
+
+#connect-btn {
+    padding: 10px 20px;
+    font-size: 16px;
+    border: 1px solid #444;
+    border-left: none;
+    background-color: #5a3e8d;
+    color: white;
+    cursor: pointer;
+    border-radius: 0 5px 5px 0;
+    transition: background-color 0.2s;
+}
+
+#connect-btn:hover {
+    background-color: #6c4f9f;
+}

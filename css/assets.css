@@ -1,0 +1,400 @@
+/* Asset manager and asset generation UI */
+
+/* Asset Manager Styles */
+.asset-list {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+/* Generated assets wheel */
+.generated-assets-wheel {
+    margin-bottom: 16px;
+    padding: 10px 12px;
+    background-color: #333;
+    border-radius: 6px;
+    border: 1px solid #444;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.generated-assets-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.generated-assets-title {
+    font-size: 14px;
+    font-weight: bold;
+    color: #ddd;
+}
+
+.generated-assets-strip {
+    display: flex;
+    flex-direction: row;
+    gap: 10px;
+    overflow-x: auto;
+    padding: 4px 2px;
+}
+
+.generated-assets-strip::-webkit-scrollbar {
+    height: 6px;
+}
+
+.generated-assets-strip::-webkit-scrollbar-track {
+    background: #222;
+}
+
+.generated-assets-strip::-webkit-scrollbar-thumb {
+    background: #555;
+    border-radius: 3px;
+}
+
+.generated-assets-empty {
+    font-size: 13px;
+    color: #aaa;
+    padding: 4px 0;
+}
+
+.generated-asset-item {
+    position: relative;
+    flex: 0 0 auto;
+    width: 56px;
+    height: 56px;
+    border-radius: 4px;
+    overflow: hidden;
+    border: 1px solid #555;
+    background-color: #222;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: grab; /* visually indicate draggable */
+}
+
+.generated-asset-thumb img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    image-rendering: pixelated;
+}
+
+.generated-asset-delete-btn {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 18px;
+    height: 18px;
+    border: none;
+    background-color: rgba(0,0,0,0.7);
+    color: #fff;
+    font-size: 11px;
+    cursor: pointer;
+    border-bottom-left-radius: 4px;
+}
+
+/* Assign menu for generated assets */
+.generated-asset-assign-menu {
+    position: absolute;
+    bottom: -2px;
+    left: 0;
+    right: 0;
+    transform: translateY(100%);
+    background-color: #2a2a2a;
+    border: 1px solid #555;
+    border-radius: 4px;
+    padding: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    z-index: 10;
+}
+
+.generated-asset-assign-btn {
+    background-color: #444;
+    color: #eee;
+    border: none;
+    border-radius: 3px;
+    padding: 3px 4px;
+    font-size: 11px;
+    cursor: pointer;
+    text-align: left;
+    white-space: nowrap;
+}
+
+.generated-asset-assign-btn:hover {
+    background-color: #5a3e8d;
+    color: #fff;
+}
+
+/* Utility hidden class reused here */
+.hidden {
+    display: none !important;
+}
+
+/* Asset rows */
+
+.asset-row {
+    display: flex;
+    align-items: center;
+    background-color: #333;
+    padding: 15px;
+    border-radius: 6px;
+    gap: 20px;
+    transition: background-color 0.15s, border-color 0.15s;
+}
+
+/* Highlight when an asset is a drop target */
+.asset-row-drop-target {
+    background-color: #3a3a3a;
+    border: 1px dashed #6c4f9f;
+}
+
+.asset-preview {
+    width: 64px;
+    height: 64px;
+    background-color: #222;
+    border: 1px dashed #555;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.asset-preview img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    image-rendering: pixelated;
+}
+
+.asset-info {
+    flex: 1;
+}
+
+.asset-info h4 {
+    margin: 0 0 5px;
+    color: #f0f0f0;
+}
+
+.asset-info .status {
+    margin: 0;
+    font-size: 14px;
+}
+
+.asset-actions {
+    display: flex;
+    flex-direction: row;
+    gap: 8px;
+    min-width: 0;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.upload-btn {
+    background-color: #5a3e8d;
+    color: white;
+    padding: 8px 12px;
+    border-radius: 4px;
+    text-align: center;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background-color 0.2s;
+    display: inline-block;
+}
+
+.upload-btn:hover {
+    background-color: #6c4f9f;
+}
+
+.generate-btn {
+    background-color: #4a8cff;
+    color: white;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background-color 0.2s;
+}
+
+.generate-btn:hover {
+    background-color: #3b78dd;
+}
+
+.reset-btn {
+    background-color: #444;
+    color: #ccc;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background-color 0.2s;
+}
+
+.reset-btn:hover {
+    background-color: #555;
+}
+
+/* Asset generation modal */
+
+.asset-gen-overlay {
+    position: fixed;
+    inset: 0;
+    background-color: rgba(0,0,0,0.75);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1200;
+}
+
+.asset-gen-modal {
+    background-color: #2a2a2a;
+    border-radius: 8px;
+    border: 1px solid #555;
+    padding: 16px 18px;
+    width: 420px;
+    max-width: 90%;
+    box-sizing: border-box;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.6);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.asset-gen-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.asset-gen-header h3 {
+    margin: 0;
+    font-size: 16px;
+}
+
+.asset-gen-close-btn {
+    background: none;
+    border: none;
+    color: #ccc;
+    font-size: 18px;
+    cursor: pointer;
+}
+
+.asset-gen-body {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.asset-gen-label {
+    font-size: 13px;
+    color: #ccc;
+}
+
+.asset-gen-input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 6px 8px;
+    background-color: #333;
+    color: #f0f0f0;
+    border-radius: 4px;
+    border: 1px solid #555;
+    resize: vertical;
+}
+
+.asset-gen-status {
+    font-size: 12px;
+    min-height: 16px;
+}
+
+.asset-gen-status-info {
+    color: #ccc;
+}
+
+.asset-gen-status-success {
+    color: #8BC34A;
+}
+
+.asset-gen-status-error {
+    color: #ff8888;
+}
+
+.asset-gen-preview-container {
+    border-radius: 4px;
+    border: 1px solid #444;
+    background-color: #1e1e1e;
+    height: 140px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+.asset-gen-preview-placeholder {
+    font-size: 13px;
+    color: #777;
+    padding: 6px;
+    text-align: center;
+}
+
+.asset-gen-preview-img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    image-rendering: pixelated;
+}
+
+.asset-gen-preview-img.hidden {
+    display: none;
+}
+
+.asset-gen-footer {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 4px;
+}
+
+.asset-gen-generate-btn,
+.asset-gen-accept-btn,
+.asset-gen-decline-btn,
+.asset-gen-delete-btn {
+    padding: 6px 10px;
+    border-radius: 4px;
+    border: none;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.asset-gen-generate-btn {
+    background-color: #4a8cff;
+    color: #fff;
+}
+
+.asset-gen-accept-btn {
+    background-color: #4CAF50;
+    color: #fff;
+}
+
+.asset-gen-decline-btn {
+    background-color: #777;
+    color: #fff;
+}
+
+.asset-gen-delete-btn {
+    background-color: #b33a3a;
+    color: #fff;
+}
+
+.asset-gen-footer button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.asset-gen-spacer {
+    flex: 1;
+}

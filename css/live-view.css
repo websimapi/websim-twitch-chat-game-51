@@ -1,0 +1,169 @@
+/* Live View / remote inventory styles */
+
+#remote-inventory-container.tab-content {
+    max-width: none;
+    flex: 1;
+}
+
+#remote-inventory-container {
+    background-color: #000;
+    border: none;
+    border-radius: 0;
+    padding: 0;
+    text-align: left;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    flex: 1;
+    width: 100%;
+    position: relative;
+    overflow: hidden;
+}
+
+#remote-inventory-container #live-view-canvas {
+    width: 100%;
+    height: 100%;
+    background-color: #000;
+    border-radius: 0;
+    border: none;
+    display: block;
+}
+
+#remote-inventory-container #live-view-content {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
+    padding: 12px 12px 16px 16px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    align-items: flex-end;
+    pointer-events: none;
+}
+
+/* Allow interactive elements inside overlay */
+#remote-inventory-container #live-view-content * {
+    pointer-events: auto;
+}
+
+/* Headline / text styling in overlay states */
+#remote-inventory-container h2 {
+    margin: 0 0 10px;
+}
+
+#remote-inventory-container p {
+    color: #ccc;
+    line-height: 1.5;
+}
+
+/* Inventory panel in Live View overlay */
+.live-view-inventory-panel {
+    background-color: rgba(26, 26, 26, 0.9);
+    border-radius: 8px;
+    border: 1px solid #555;
+    padding: 12px 14px;
+    min-width: 190px;
+    max-width: 260px;
+}
+
+.live-view-inventory-panel .inventory-item {
+    font-size: 16px;
+}
+
+/* Mode toggle button in top-right of Live View */
+#live-view-toggle-view-btn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    padding: 6px 12px;
+    font-size: 13px;
+    border: 1px solid #555;
+    border-radius: 16px;
+    background-color: rgba(42, 42, 42, 0.9);
+    color: #f0f0f0;
+    cursor: pointer;
+    z-index: 2;
+}
+
+#live-view-toggle-view-btn:hover {
+    background-color: rgba(60, 60, 60, 0.95);
+}
+
+/* Center content for non-linked states inside overlay */
+.live-view-center-state {
+    margin: auto;
+    text-align: center;
+    max-width: 320px;
+    background-color: rgba(26, 26, 26, 0.9);
+    padding: 16px 18px;
+    border-radius: 8px;
+    border: 1px solid #444;
+}
+
+/* Request link button inside overlay */
+#request-link-btn {
+    padding: 10px 18px;
+    font-size: 16px;
+    font-weight: bold;
+    border: none;
+    background-color: #4CAF50;
+    color: white;
+    cursor: pointer;
+    border-radius: 5px;
+    transition: background-color 0.2s;
+    margin-top: 10px;
+}
+
+#request-link-btn:hover:enabled {
+    background-color: #45a049;
+}
+
+#request-link-btn:disabled {
+    background-color: #555;
+    cursor: not-allowed;
+}
+
+/* Live view inventory contents */
+
+.inventory-display {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    background-color: #1a1a1a;
+    padding: 20px;
+    border-radius: 6px;
+    border: 1px solid #555;
+}
+
+.inventory-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 20px;
+}
+
+.inventory-item .label {
+    color: #ccc;
+}
+
+.inventory-item .value {
+    color: #f0f0f0;
+    font-weight: bold;
+}
+
+/* Pairing code display */
+
+.code-display {
+    background-color: #1a1a1a;
+    padding: 15px;
+    border-radius: 6px;
+    font-family: monospace;
+    font-size: 28px;
+    letter-spacing: 4px;
+    color: #ff8c00;
+    border: 1px dashed #555;
+    margin: 10px 0;
+}
