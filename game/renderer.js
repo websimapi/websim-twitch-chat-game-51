@@ -40,6 +40,9 @@ export class ThreeRenderer {
         this.playerCanvases = new Map(); // id -> { canvas, texture }
         
         this.mapVersion = -1; // To track map regeneration
+
+        // New: frame counter to track which sprites are used each render
+        this.frameId = 0;
     }
 
     resize(game) {
@@ -184,8 +187,8 @@ export class ThreeRenderer {
         sprite.position.set(x, z, y); // Game Y -> 3D Z, Game Z (height) -> 3D Y
         sprite.scale.set(scale, scale, 1);
         
-        // Mark as seen this frame
-        sprite.userData.lastUpdate = Date.now();
+        // Mark as seen this frame (use frameId instead of timestamp)
+        sprite.userData.lastFrameId = this.frameId;
     }
     
     createOrUpdatePlayer(player) {
@@ -233,16 +236,19 @@ export class ThreeRenderer {
 
         sprite.position.set(player.pixelX, z + 0.5, player.pixelY); // +0.5 for height offset of sprite
         sprite.scale.set(1.5, 1.5, 1); // Slightly larger player sprite
-        sprite.userData.lastUpdate = Date.now();
+        // Mark as seen this frame (use frameId instead of timestamp)
+        sprite.userData.lastFrameId = this.frameId;
     }
 
     render(game) {
+        // Increment frame counter at the start of each render
+        this.frameId += 1;
+        const currentFrameId = this.frameId;
+
         this.updateCamera(game);
         
         // Only update terrain geometry on init or changes, not every frame
         this.updateTerrain(game.map); 
-
-        const now = Date.now();
 
         // Render Players
         for (const player of game.players.values()) {
@@ -282,15 +288,13 @@ export class ThreeRenderer {
             }
         }
 
-        // Cleanup stale sprites
-        // Only run cleanup occasionally to avoid checking thousands of sprites every frame?
-        // Actually, iteration over map keys is fast enough for < 5000 objects.
-        // If world is huge, this might need optimization, but with render_distance, visible count is low.
-        // We must ensure invisible sprites are removed so they don't clog up the scene.
+        // Cleanup stale sprites: remove anything not updated this frame
         for (const [id, sprite] of this.sprites) {
-            if (sprite.userData.lastUpdate !== now) {
+            if (sprite.userData.lastFrameId !== currentFrameId) {
                 this.scene.remove(sprite);
-                if(sprite.material.map) sprite.material.map.dispose();
+                if (sprite.material.map && sprite.material.map.isTexture && !sprite.material.map.isCanvasTexture) {
+                    sprite.material.map.dispose();
+                }
                 sprite.material.dispose();
                 this.sprites.delete(id);
             }
