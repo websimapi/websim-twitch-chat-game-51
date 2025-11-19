@@ -103,6 +103,124 @@ export class ThreeRenderer {
         return this.textureCache[img.src];
     }
 
+    // Helper to get or create a canvas/texture pair for a player label
+    getPlayerLabelCanvas(playerId) {
+        let entry = this.playerCanvases.get(playerId);
+        if (!entry) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 256;
+            canvas.height = 96;
+            const ctx = canvas.getContext('2d');
+            ctx.imageSmoothingEnabled = false;
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.colorSpace = THREE.SRGBColorSpace;
+            texture.magFilter = THREE.NearestFilter;
+            texture.minFilter = THREE.NearestFilter;
+            entry = { canvas, ctx, texture };
+            this.playerCanvases.set(playerId, entry);
+        }
+        return entry;
+    }
+
+    // Draw username, energy bar, and action timer indicator into the label canvas
+    drawPlayerLabel(player, ctx) {
+        const canvas = ctx.canvas;
+        const w = canvas.width;
+        const h = canvas.height;
+        ctx.clearRect(0, 0, w, h);
+
+        // Background for readability
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+        const bgWidth = w * 0.9;
+        const bgHeight = h * 0.65;
+        const bgX = (w - bgWidth) / 2;
+        const bgY = (h - bgHeight) / 2;
+        ctx.fillRect(bgX, bgY, bgWidth, bgHeight);
+
+        // Username
+        const nameY = bgY + bgHeight * 0.3;
+        ctx.font = '20px Arial, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+        ctx.lineWidth = 3;
+        ctx.fillStyle = '#ffffff';
+        ctx.strokeText(player.username, w / 2, nameY);
+        ctx.fillText(player.username, w / 2, nameY);
+
+        // Energy bar (similar to 2D, but simplified to rectangle segments)
+        const energy = player.energy;
+        const maxSlots = 12;
+        if (energy && energy.timestamps && energy.timestamps.length > 0) {
+            const barWidth = bgWidth * 0.9;
+            const barHeight = 10;
+            const barX = (w - barWidth) / 2;
+            const barY = nameY + 6;
+
+            const filledSlots = Math.min(maxSlots, energy.timestamps.length);
+            const slotWidth = barWidth / maxSlots;
+            const remainingRatio = 1 - (energy.currentCellDrainRatio || 0);
+
+            for (let i = 0; i < maxSlots; i++) {
+                const x = barX + i * slotWidth;
+                ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+                ctx.strokeRect(Math.round(x) + 0.5, Math.round(barY) + 0.5, Math.floor(slotWidth) - 1, barHeight);
+
+                if (i < filledSlots) {
+                    // Current draining cell (leftmost)
+                    if (i === 0) {
+                        const width = slotWidth * remainingRatio;
+                        const alpha = 0.6 + (energy.flashState || 0) * 0.4;
+                        ctx.fillStyle = `rgba(173,216,230,${alpha})`;
+                        ctx.fillRect(Math.round(x) + 1, barY + 1, Math.max(0, width - 2), barHeight - 2);
+                    } else {
+                        ctx.fillStyle = 'rgb(173,216,230)';
+                        ctx.fillRect(Math.round(x) + 1, barY + 1, Math.floor(slotWidth) - 2, barHeight - 2);
+                    }
+                } else {
+                    // Empty slot
+                    ctx.fillStyle = 'rgba(173,216,230,0.25)';
+                    ctx.fillRect(Math.round(x) + 1, barY + 1, Math.floor(slotWidth) - 2, barHeight - 2);
+                }
+            }
+        }
+
+        // Action timer circle indicator to the left of name
+        const total = player.actionTotalTime || 0;
+        const remaining = player.actionTimer || 0;
+        if (total > 0 && remaining > 0) {
+            const progress = Math.min(1, Math.max(0, (total - remaining) / total));
+            const radius = 12;
+            const centerX = bgX + radius + 6;
+            const centerY = nameY - 10;
+
+            // Background circle
+            ctx.beginPath();
+            ctx.fillStyle = 'rgba(0,0,0,0.7)';
+            ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Icon color based on progress
+            let color;
+            if (progress < 0.33) {
+                color = `rgb(255, ${Math.floor(255 * (progress / 0.33))}, 0)`; // Red -> Orange
+            } else if (progress < 0.66) {
+                color = `rgb(${255 - Math.floor(255 * ((progress - 0.33) / 0.33))}, 255, 0)`; // Orange -> Yellow
+            } else {
+                color = 'rgb(0, 255, 0)'; // Green
+            }
+
+            // Progress arc
+            const startAngle = -Math.PI / 2;
+            const endAngle = startAngle + progress * Math.PI * 2;
+            ctx.beginPath();
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 3;
+            ctx.arc(centerX, centerY, radius - 2, startAngle, endAngle);
+            ctx.stroke();
+        }
+    }
+
     updateTerrain(map) {
         // Optimization: Only update terrain if strictly necessary (init or dimensions change)
         // Updating height of 65k vertices every frame is too slow.
@@ -219,6 +337,48 @@ export class ThreeRenderer {
         const z = player.z || 0;
         mesh.position.set(player.pixelX, z + 0.5, player.pixelY);
         mesh.userData.lastFrameId = this.frameId;
+
+        // --- Label sprite above player ---
+        const labelId = `p_label_${player.id}`;
+        let labelSprite = this.sprites.get(labelId);
+
+        const labelCanvasEntry = this.getPlayerLabelCanvas(player.id);
+        this.drawPlayerLabel(player, labelCanvasEntry.ctx);
+        labelCanvasEntry.texture.needsUpdate = true;
+
+        if (!labelSprite) {
+            const mat = new THREE.SpriteMaterial({
+                map: labelCanvasEntry.texture,
+                transparent: true,
+                depthTest: false,    // Always render on top of world
+                depthWrite: false
+            });
+            labelSprite = new THREE.Sprite(mat);
+            labelSprite.center.set(0.5, 0); // bottom center
+            labelSprite.renderOrder = 999;  // above most things
+            this.scene.add(labelSprite);
+            this.sprites.set(labelId, labelSprite);
+        } else if (labelSprite.material.map !== labelCanvasEntry.texture) {
+            labelSprite.material.map = labelCanvasEntry.texture;
+        }
+
+        // Position label slightly above the sphere
+        const labelHeightWorld = 1.2;
+        labelSprite.position.set(
+            mesh.position.x,
+            mesh.position.y + labelHeightWorld,
+            mesh.position.z
+        );
+
+        // Scale label so it is readable but not huge; scale with distance a bit by using fixed world size
+        const labelWorldWidth = 3.0;
+        const aspect = labelCanvasEntry.canvas.height > 0
+            ? labelCanvasEntry.canvas.width / labelCanvasEntry.canvas.height
+            : 256 / 96;
+        const labelWorldHeight = labelWorldWidth / aspect;
+        labelSprite.scale.set(labelWorldWidth, labelWorldHeight, 1);
+
+        labelSprite.userData.lastFrameId = this.frameId;
     }
 
     render(game) {
