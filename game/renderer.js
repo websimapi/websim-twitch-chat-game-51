@@ -137,9 +137,8 @@ function renderYSorted(ctx, players, map, drawStartX, drawEndX, drawStartY, draw
         if (player.isPowered()) {
             renderList.push({
                 type: 'player',
-                // In 2.5D, Z-sort is based on diagonal depth (x+y).
-                // project() doesn't return depth, so we calculate sort key manually.
-                depth: getSortDepth(player.pixelX, player.pixelY, 0, viewMode) + 0.5, // Ensure players render above ground objects
+                // Use actual terrain height so players sort correctly above ground objects on slopes
+                depth: getSortDepth(player.pixelX, player.pixelY, player.z || 0, viewMode) + 0.5,
                 entity: player,
             });
         }
@@ -176,9 +175,9 @@ function renderYSorted(ctx, players, map, drawStartX, drawEndX, drawStartY, draw
 
                 let depthOffset = 0.5; // default for tall trees
 
-                // Ground items like logs and bushes should be behind players on the same tile
+                // Ground items like logs and bushes should be clearly behind players on the same tile
                 if (typeStr === 'logs' || typeStr === 'bushes') {
-                     depthOffset = 0.0; 
+                    depthOffset = -1.0;
                 }
                 
                 renderList.push({

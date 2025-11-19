@@ -184,7 +184,11 @@ export class LiveViewRenderer {
 
                         // Flat ground details (flowers only). Logs/bushes/trees stand up later.
                         if (tileType === TILE_TYPE.FLOWER_PATCH) {
-                            ctx.drawImage(this.assets.flowers, drawX, drawY, ts + 1, ts + 1);
+                            // Draw flowers slightly smaller and centered so they don't look zoomed in
+                            const flowerSize = ts * 0.7;
+                            const flowerX = drawX + (ts - flowerSize) / 2;
+                            const flowerY = drawY + (ts - flowerSize) / 2;
+                            ctx.drawImage(this.assets.flowers, flowerX, flowerY, flowerSize, flowerSize);
                         }
                     }
                 }
@@ -214,7 +218,15 @@ export class LiveViewRenderer {
                         else if (tileType === TILE_TYPE.FLOWER_PATCH) objectImage = this.assets.flowers;
 
                         if (objectImage) {
-                            ctx.drawImage(objectImage, drawX, drawY, ts + 1, ts + 1);
+                            // Make flowers slightly smaller so they don't appear zoomed in
+                            if (tileType === TILE_TYPE.FLOWER_PATCH) {
+                                const flowerSize = ts * 0.7;
+                                const flowerX = drawX + (ts - flowerSize) / 2;
+                                const flowerY = drawY + (ts - flowerSize) / 2;
+                                ctx.drawImage(objectImage, flowerX, flowerY, flowerSize, flowerSize);
+                            } else {
+                                ctx.drawImage(objectImage, drawX, drawY, ts + 1, ts + 1);
+                            }
                         }
                     }
                 }
@@ -227,7 +239,8 @@ export class LiveViewRenderer {
         // Main player
         renderList.push({
             type: 'player',
-            depth: getSortDepth(mainPlayer.pixelX, mainPlayer.pixelY, 0, viewMode) + 0.5, // Players above ground objects
+            // Use player's Z so they sort correctly on slopes above ground objects
+            depth: getSortDepth(mainPlayer.pixelX, mainPlayer.pixelY, mainPlayer.z || 0, viewMode) + 0.5,
             entity: mainPlayer
         });
 
@@ -237,7 +250,7 @@ export class LiveViewRenderer {
                 const p = new MockPlayer(pState);
                 renderList.push({
                     type: 'player',
-                    depth: getSortDepth(p.pixelX, p.pixelY, 0, viewMode) + 0.5, // Players above ground objects
+                    depth: getSortDepth(p.pixelX, p.pixelY, p.z || 0, viewMode) + 0.5,
                     entity: p
                 });
             });
@@ -260,7 +273,8 @@ export class LiveViewRenderer {
 
                         const baseDepth = getSortDepth(worldX, worldY, 0, viewMode);
                         let depthOffset = 0.5;
-                        if (typeStr === 'logs' || typeStr === 'bushes') depthOffset = -0.25;
+                        // Ground objects like logs/bushes should be clearly behind players
+                        if (typeStr === 'logs' || typeStr === 'bushes') depthOffset = -1.0;
 
                         renderList.push({
                             type: typeStr,
