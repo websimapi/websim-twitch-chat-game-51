@@ -192,52 +192,33 @@ export class ThreeRenderer {
     }
     
     createOrUpdatePlayer(player) {
-        // Generate/Update Canvas Texture for player
-        let canvasData = this.playerCanvases.get(player.id);
-        if (!canvasData) {
-            const canvas = document.createElement('canvas');
-            canvas.width = 128;
-            canvas.height = 128;
-            const tex = new THREE.CanvasTexture(canvas);
-            tex.colorSpace = THREE.SRGBColorSpace;
-            tex.minFilter = THREE.NearestFilter;
-            tex.magFilter = THREE.NearestFilter;
-            canvasData = { canvas, ctx: canvas.getContext('2d'), texture: tex };
-            this.playerCanvases.set(player.id, canvasData);
-        }
-
-        // Render player to 2D canvas
-        const { ctx, canvas, texture } = canvasData;
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        
-        // Scale context so renderPlayer thinks it's drawing to a 32px tile but on a 128px canvas (high res)
-        ctx.save();
-        ctx.scale(4, 4); 
-        ctx.translate(16, 16); // Center in the 32x32 space
-        // Mock camera offset to 0,0 since we translated
-        renderPlayer(ctx, player, 32, 0, 0, '2d'); 
-        ctx.restore();
-        
-        texture.needsUpdate = true;
-
-        // Create/Update Sprite
+        // 3D sphere representation for players in the main scene
         const id = `p_${player.id}`;
-        let sprite = this.sprites.get(id);
-        if (!sprite) {
-            const mat = new THREE.SpriteMaterial({ map: texture, transparent: true });
-            sprite = new THREE.Sprite(mat);
-            sprite.center.set(0.5, 0.3); // Adjust anchor so feet are on ground (player circle is centered)
-            this.scene.add(sprite);
-            this.sprites.set(id, sprite);
-        }
-        
-        // Player uses z + 0.5 to prevent clipping and look nice
-        const z = player.z || 0;
+        let mesh = this.sprites.get(id);
 
-        sprite.position.set(player.pixelX, z + 0.5, player.pixelY); // +0.5 for height offset of sprite
-        sprite.scale.set(1.5, 1.5, 1); // Slightly larger player sprite
-        // Mark as seen this frame (use frameId instead of timestamp)
-        sprite.userData.lastFrameId = this.frameId;
+        if (!mesh) {
+            const geometry = new THREE.SphereGeometry(0.4, 16, 16);
+            const material = new THREE.MeshStandardMaterial({
+                color: new THREE.Color(player.color || '#ffffff'),
+                metalness: 0.0,
+                roughness: 0.4
+            });
+            mesh = new THREE.Mesh(geometry, material);
+            mesh.castShadow = true;
+            mesh.receiveShadow = false;
+            this.scene.add(mesh);
+            this.sprites.set(id, mesh);
+        } else {
+            // Update color if player's color changed
+            if (mesh.material && mesh.material.color) {
+                mesh.material.color.set(player.color || '#ffffff');
+            }
+        }
+
+        // Use map height as Y (3D up) so player follows terrain
+        const z = player.z || 0;
+        mesh.position.set(player.pixelX, z + 0.5, player.pixelY);
+        mesh.userData.lastFrameId = this.frameId;
     }
 
     render(game) {
@@ -292,10 +273,12 @@ export class ThreeRenderer {
         for (const [id, sprite] of this.sprites) {
             if (sprite.userData.lastFrameId !== currentFrameId) {
                 this.scene.remove(sprite);
-                if (sprite.material.map && sprite.material.map.isTexture && !sprite.material.map.isCanvasTexture) {
-                    sprite.material.map.dispose();
+                if (sprite.material) {
+                    if (sprite.material.map && sprite.material.map.isTexture && !sprite.material.map.isCanvasTexture) {
+                        sprite.material.map.dispose();
+                    }
+                    sprite.material.dispose();
                 }
-                sprite.material.dispose();
                 this.sprites.delete(id);
             }
         }
