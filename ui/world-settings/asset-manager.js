@@ -1,5 +1,5 @@
 import * as StorageManager from '../../storage-manager.js';
-import { ASSET_DEFINITIONS } from './assets/definitions.js';
+import { ASSET_DEFINITIONS, ASSET_RENDER_TYPES } from './assets/definitions.js';
 import { createGeneratedAssetsWheel } from './assets/generated-library.js';
 import { openGenerationModal } from './assets/generation-modal.js';
 
@@ -7,11 +7,13 @@ export function initAssetManager(channel, worldName) {
     const container = document.getElementById('assets-list-container');
     let currentAssets = {};
     let generatedAssets = [];
+    let assetTypes = {}; // New: per-asset render types
 
     async function loadCurrentAssets() {
         const gameState = await StorageManager.loadGameState(channel, worldName);
         currentAssets = gameState.assets || {};
         generatedAssets = gameState.assetsGenerated || [];
+        assetTypes = gameState.assetTypes || {};
         renderAssetsList();
     }
 
@@ -32,6 +34,12 @@ export function initAssetManager(channel, worldName) {
     async function saveGeneratedAssets() {
         await StorageManager.saveWorldGeneratedAssets(channel, worldName, generatedAssets);
         renderAssetsList();
+    }
+
+    async function saveAssetType(key, type) {
+        assetTypes[key] = type;
+        await StorageManager.saveWorldAssetTypes(channel, worldName, assetTypes);
+        // No need to re-render immediately, but keep UI in sync if needed
     }
 
     function deleteGeneratedAsset(id) {
@@ -70,6 +78,14 @@ export function initAssetManager(channel, worldName) {
             const currentSrc = currentAssets[def.key] || def.defaultSrc;
             const isOverridden = !!currentAssets[def.key];
 
+            const currentType = assetTypes[def.key] || def.defaultRenderType || 'tile';
+
+            const typeOptionsHtml = ASSET_RENDER_TYPES.map(t => {
+                const label = t === 'tile' ? 'Tile' : t === 'standing' ? 'Standing' : 'Ground';
+                const selected = t === currentType ? 'selected' : '';
+                return `<option value="${t}" ${selected}>${label}</option>`;
+            }).join('');
+
             assetRow.innerHTML = `
                 <div class="asset-preview">
                     <img src="${currentSrc}" alt="${def.label}">
@@ -77,13 +93,19 @@ export function initAssetManager(channel, worldName) {
                 <div class="asset-info">
                     <h4>${def.label}</h4>
                     <p class="status">${isOverridden ? '<span style="color: #4CAF50;">Custom Override Active</span>' : '<span style="color: #aaa;">Default</span>'}</p>
+                    <div class="setting-item" style="margin-top:6px;">
+                        <label style="font-size: 13px; color: #bbb; margin-right: 6px;">Asset Type:</label>
+                        <select class="asset-type-select" data-key="${def.key}" style="background:#333;color:#f0f0f0;border:1px solid #555;border-radius:4px;font-size:13px;padding:3px 6px;">
+                            ${typeOptionsHtml}
+                        </select>
+                    </div>
                 </div>
                 <div class="asset-actions">
                     <label class="upload-btn">
                         Upload New
                         <input type="file" class="asset-file-input" data-key="${def.key}" accept="image/*" style="display: none;">
                     </label>
-                    <button class="generate-btn" data-key="${def.key}" data-label="${def.label}" data-type="${def.type || ''}">Generate New</button>
+                    <button class="generate-btn" data-key="${def.key}" data-label="${def.label}" data-type="${def.promptType || ''}">Generate New</button>
                     ${isOverridden ? `<button class="reset-btn" data-key="${def.key}">Reset</button>` : ''}
                 </div>
             `;
@@ -152,12 +174,12 @@ export function initAssetManager(channel, worldName) {
             btn.addEventListener('click', () => {
                 const key = btn.dataset.key;
                 const label = btn.dataset.label || key;
-                const type = btn.dataset.type || '';
+                const promptType = btn.dataset.type || '';
 
                 openGenerationModal({
                     assetKey: key,
                     assetLabel: label,
-                    assetType: type,
+                    assetPromptType: promptType,
                     onAccept: (url) => {
                         saveAsset(key, url);
                     },
@@ -168,6 +190,15 @@ export function initAssetManager(channel, worldName) {
                         deleteGeneratedAsset(id);
                     }
                 });
+            });
+        });
+
+        // Bind asset-type dropdown events
+        container.querySelectorAll('.asset-type-select').forEach(select => {
+            select.addEventListener('change', (e) => {
+                const key = e.target.dataset.key;
+                const type = e.target.value;
+                saveAssetType(key, type);
             });
         });
     }

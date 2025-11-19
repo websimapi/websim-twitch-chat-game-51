@@ -67,7 +67,7 @@ export async function init(channel, worldName) {
     }
 }
 
-export async function saveGameState(channel, worldName, players, map, assets, generatedAssets) {
+export async function saveGameState(channel, worldName, players, map, assets, generatedAssets, assetTypes) {
     const worldKey = `${channel}/${worldName}`;
     const playersState = {};
     for (const [id, player] of players.entries()) {
@@ -102,6 +102,15 @@ export async function saveGameState(channel, worldName, players, map, assets, ge
         }
     }
 
+    if (assetTypes) {
+        dataToSave.assetTypes = assetTypes;
+    } else {
+        const existing = await idb.get('worlds', worldKey);
+        if (existing && existing.assetTypes) {
+            dataToSave.assetTypes = existing.assetTypes;
+        }
+    }
+
     await idb.set('worlds', worldKey, dataToSave);
     console.log(`[StorageManager] Saved world ${worldName} to IndexedDB.`);
 }
@@ -110,9 +119,12 @@ export async function saveWorldAssets(channel, worldName, assets) {
     const worldKey = `${channel}/${worldName}`;
     const worldData = await idb.get('worlds', worldKey) || {};
     worldData.assets = assets;
-    // Preserve any existing generated assets
+    // Preserve any existing generated assets and asset types
     if (!worldData.assetsGenerated) {
         worldData.assetsGenerated = [];
+    }
+    if (!worldData.assetTypes) {
+        worldData.assetTypes = {};
     }
     await idb.set('worlds', worldKey, worldData);
 }
@@ -121,9 +133,26 @@ export async function saveWorldGeneratedAssets(channel, worldName, generatedAsse
     const worldKey = `${channel}/${worldName}`;
     const worldData = await idb.get('worlds', worldKey) || {};
     worldData.assetsGenerated = generatedAssets || [];
-    // Preserve any existing assets overrides
+    // Preserve any existing assets overrides and asset types
     if (!worldData.assets) {
         worldData.assets = {};
+    }
+    if (!worldData.assetTypes) {
+        worldData.assetTypes = {};
+    }
+    await idb.set('worlds', worldKey, worldData);
+}
+
+export async function saveWorldAssetTypes(channel, worldName, assetTypes) {
+    const worldKey = `${channel}/${worldName}`;
+    const worldData = await idb.get('worlds', worldKey) || {};
+    worldData.assetTypes = assetTypes || {};
+    // Preserve any existing assets and generated assets
+    if (!worldData.assets) {
+        worldData.assets = {};
+    }
+    if (!worldData.assetsGenerated) {
+        worldData.assetsGenerated = [];
     }
     await idb.set('worlds', worldKey, worldData);
 }
@@ -131,7 +160,7 @@ export async function saveWorldGeneratedAssets(channel, worldName, generatedAsse
 export async function loadGameState(channel, worldName) {
     const worldKey = `${channel}/${worldName}`;
     const data = await idb.get('worlds', worldKey);
-    return data || { players: {}, map: {}, assets: {}, assetsGenerated: [] };
+    return data || { players: {}, map: {}, assets: {}, assetsGenerated: [], assetTypes: {} };
 }
 
 export async function deleteWorld(channel, worldName) {
@@ -199,7 +228,8 @@ export async function exportWorldData(channel, worldName, useVerbose) {
             players: finalPlayers,
             map: worldState.map,
             assets: worldState.assets || {},
-            assetsGenerated: worldState.assetsGenerated || []
+            assetsGenerated: worldState.assetsGenerated || [],
+            assetTypes: worldState.assetTypes || {}
         },
         format: useVerbose ? 'verbose' : 'compact',
     };

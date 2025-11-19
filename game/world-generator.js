@@ -47,7 +47,7 @@ export async function regenerateMapFeature(channel, worldName, feature, settings
     worldState.map.heightGrid = tempMap.heightGrid;
     
     // We need to pass a Map-like object to saveGameState, not the full Player instances
-    const dummyPlayers = new window.Map(); // Use window.Map to avoid conflict with the Map class from this module
+    const dummyPlayers = new window.Map();
     for (const id in worldState.players) {
         dummyPlayers.set(id, { getState: () => worldState.players[id] });
     }
@@ -57,9 +57,17 @@ export async function regenerateMapFeature(channel, worldName, feature, settings
         treeRespawns: worldState.map.treeRespawns || [] 
     };
 
-    await StorageManager.saveGameState(channel, worldName, dummyPlayers, dummyMap, worldState.assets || {}, worldState.assetsGenerated || []);
+    await StorageManager.saveGameState(
+        channel,
+        worldName,
+        dummyPlayers,
+        dummyMap,
+        worldState.assets || {},
+        worldState.assetsGenerated || [],
+        worldState.assetTypes || {}
+    );
 
-    if (feature !== 'terrain') { // Terrain might be part of a larger reset, don't alert if silent
+    if (feature !== 'terrain') {
         alert(`${feature.charAt(0).toUpperCase() + feature.slice(1)} have been regenerated for "${worldName}"! The changes will be visible the next time you load the world.`);
     }
 }

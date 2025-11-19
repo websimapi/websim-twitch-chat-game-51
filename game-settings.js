@@ -25,12 +25,11 @@ export const DEFAULT_GAME_SETTINGS = {
     terrain: {
         seed: 12345,
         scale: 20, // Lower is more zoomed in/larger features. Actually often noise(x/scale). 
-        height_multiplier: 2, // Default height for new worlds (was 0, now 2 for visible slopes)
+        height_multiplier: 4, // Default height for new worlds (increased for more visible slopes)
         roughness: 0.5,
         water_level: -1, // Not using water yet, but good to have
     },
     visuals: {
-        view_mode: 'isometric', // 'top-down' or 'isometric' (formerly 2d/2.5d)
         render_distance: 30,
         show_target_indicator: true,
         show_hitboxes: false,

@@ -200,8 +200,6 @@ async function requestLink() {
 }
 
 export async function initRemoteInventory() {
-    // Live view will always render in 3D/2.5D mode
-    let liveViewMode = '2.5d';
     renderUI(STATUS.INITIAL);
 
     DOM.remoteInventoryContainer.addEventListener('click', (e) => {

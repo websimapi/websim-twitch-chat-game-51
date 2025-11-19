@@ -124,12 +124,13 @@ function drawEnergyBar(ctx, player, screenX, usernameTagY, usernameFontSize) {
         let isDrainingCell = false;
 
         if (i < totalEnergyCells) {
-            const cellIndex = totalEnergyCells - 1 - i; 
+            // Cells fill from left to right; the rightmost filled slot is the draining cell.
+            const isLastFilledSlot = (i === totalEnergyCells - 1);
 
-            if (cellIndex === 0) {
+            if (isLastFilledSlot) {
                 block = PARTIAL_BLOCKS[partialBlockIndex];
                 isDrainingCell = true;
-            } else if (cellIndex > 0) {
+            } else {
                 block = FILLED_BLOCK;
             }
         } 

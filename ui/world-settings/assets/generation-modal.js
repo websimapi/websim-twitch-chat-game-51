@@ -3,7 +3,7 @@ import { buildPromptForAsset } from './definitions.js';
 export function openGenerationModal({
     assetKey,
     assetLabel,
-    assetType,
+    assetPromptType, // renamed from assetType for clarity
     onAccept,
     onGenerated,
     onDeleteGenerated,
@@ -67,7 +67,7 @@ export function openGenerationModal({
 
     generateBtn.addEventListener('click', async () => {
         const rawPrompt = (promptInput.value || '').trim();
-        const finalPrompt = buildPromptForAsset(assetType, rawPrompt);
+        const finalPrompt = buildPromptForAsset(assetPromptType, rawPrompt);
 
         if (!finalPrompt) {
             statusEl.textContent = 'Please enter a description first.';
@@ -176,3 +176,4 @@ export function openGenerationModal({
         close();
     });
 }
+

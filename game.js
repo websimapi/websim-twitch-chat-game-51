@@ -15,6 +15,7 @@ import { updateActiveChopping } from './game/chopping-manager.js';
 import { initRealtimeHost, sendLiveViewUpdate } from './game/realtime.js';
 import { handlePlayerCommand as handlePlayerCommandImpl } from './game/commands.js';
 import { TILE_TYPE } from './map-tile-types.js';
+import { generateTerrain } from './game/world-generator.js';
 
 export class Game {
     constructor(container, channel, worldName = 'default', hosts = [], settings = DEFAULT_GAME_SETTINGS) {
@@ -43,11 +44,17 @@ export class Game {
         
         this.assets = {}; 
         this.generatedAssets = [];
+        this.assetTypes = {}; // New: per-asset render types
 
         this.room = null;
         this.pendingLinks = new Map();
         this.linkedPlayers = new Map();
         this.liveViewUpdateTimer = 0;
+
+        // NEW: middle-mouse drag state for camera orbit
+        this.isMiddleDragging = false;
+        this.lastDragX = 0;
+        this.lastDragY = 0;
 
         setEnergyCooldown(this.settings.energy.chat_cooldown_seconds);
 
@@ -60,51 +67,43 @@ export class Game {
             this.camera.handleWheel(e.deltaY);
         }, { passive: false });
 
-        // Middle mouse drag to pan camera focus (world position)
-        this._isPanning = false;
-        this._lastPanX = 0;
-        this._lastPanY = 0;
-
+        // Middle mouse drag handlers for camera orbit (yaw + pitch)
         this.container.addEventListener('mousedown', (e) => {
-            // Middle mouse button is usually button === 1
-            if (e.button === 1) {
+            if (e.button === 1) { // middle mouse
                 e.preventDefault();
-                this._isPanning = true;
-                this._lastPanX = e.clientX;
-                this._lastPanY = e.clientY;
+                this.isMiddleDragging = true;
+                this.lastDragX = e.clientX;
+                this.lastDragY = e.clientY;
             }
         });
 
         window.addEventListener('mouseup', (e) => {
             if (e.button === 1) {
-                this._isPanning = false;
+                this.isMiddleDragging = false;
             }
         });
 
-        this.container.addEventListener('mouseleave', () => {
-            this._isPanning = false;
+        window.addEventListener('mousemove', (e) => {
+            if (!this.isMiddleDragging) return;
+            const dxPixels = e.clientX - this.lastDragX;
+            const dyPixels = e.clientY - this.lastDragY;
+            this.lastDragX = e.clientX;
+            this.lastDragY = e.clientY;
+
+            // Rotate camera based on horizontal (yaw) and vertical (pitch) drag
+            this.camera.rotate(dxPixels, dyPixels);
         });
 
-        this.container.addEventListener('mousemove', (e) => {
-            if (!this._isPanning) return;
-            const dx = e.clientX - this._lastPanX;
-            const dy = e.clientY - this._lastPanY;
-            this._lastPanX = e.clientX;
-            this._lastPanY = e.clientY;
-
-            // Convert screen-space delta to world-space delta based on current zoom
-            const viewHeight = this.camera.zoom; // world units (grid units)
-            const aspect = window.innerWidth / window.innerHeight;
-            const viewWidth = viewHeight * aspect;
-
-            const worldDx = -dx / window.innerWidth * viewWidth;
-            const worldDy = dy / window.innerHeight * viewHeight;
-
-            this.camera.pan(worldDx, worldDy);
-        });
-        
         this.saveInterval = setInterval(async () => {
-            await StorageManager.saveGameState(this.channel, this.worldName, this.players, this.map, this.assets, this.generatedAssets);
+            await StorageManager.saveGameState(
+                this.channel,
+                this.worldName,
+                this.players,
+                this.map,
+                this.assets,
+                this.generatedAssets,
+                this.assetTypes
+            );
         }, 5000);
     }
 
@@ -115,6 +114,7 @@ export class Game {
 
         this.assets = gameState.assets || {};
         this.generatedAssets = gameState.assetsGenerated || [];
+        this.assetTypes = gameState.assetTypes || {};
 
         if (gameState.map && gameState.map.grid && gameState.map.grid.length > 0) {
             this.map.grid = gameState.map.grid;
@@ -128,7 +128,10 @@ export class Game {
                 this.map.heightGrid = Array(this.map.height).fill(0).map(() => Array(this.map.width).fill(0));
             }
         } else {
+            // New world: generate base map and apply terrain settings for height map
             this.map.generateMap();
+            const terrainSettings = this.settings.terrain || DEFAULT_GAME_SETTINGS.terrain;
+            generateTerrain(this.map, terrainSettings);
         }
 
         let hasTree = false;
@@ -174,18 +177,6 @@ export class Game {
         if (e.code === 'Space') {
             e.preventDefault();
             this.camera.switchToNextPlayerFocus();
-        } else if (e.code === 'ArrowLeft') {
-            // Rotate camera left around focused player in isometric mode
-            e.preventDefault();
-            if (this.settings.visuals.view_mode === 'isometric') {
-                this.camera.adjustOrbit(-this.camera.orbitSpeedDegPerStep);
-            }
-        } else if (e.code === 'ArrowRight') {
-            // Rotate camera right around focused player in isometric mode
-            e.preventDefault();
-            if (this.settings.visuals.view_mode === 'isometric') {
-                this.camera.adjustOrbit(this.camera.orbitSpeedDegPerStep);
-            }
         }
     }
 

@@ -73,6 +73,25 @@
     font-size: 16px;
 }
 
+/* Mode toggle button in top-right of Live View */
+#live-view-toggle-view-btn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    padding: 6px 12px;
+    font-size: 13px;
+    border: 1px solid #555;
+    border-radius: 16px;
+    background-color: rgba(42, 42, 42, 0.9);
+    color: #f0f0f0;
+    cursor: pointer;
+    z-index: 2;
+}
+
+#live-view-toggle-view-btn:hover {
+    background-color: rgba(60, 60, 60, 0.95);
+}
+
 /* Center content for non-linked states inside overlay */
 .live-view-center-state {
     margin: auto;

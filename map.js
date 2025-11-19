@@ -279,6 +279,7 @@ export class Map {
 
     getChunk(centerX, centerY, radius) {
         const chunk = [];
+        const heightChunk = [];
         const startX = Math.floor(centerX - radius);
         const endX = Math.ceil(centerX + radius);
         const startY = Math.floor(centerY - radius);
@@ -286,17 +287,22 @@ export class Map {
 
         for (let j = startY; j <= endY; j++) {
             const row = [];
+            const heightRow = [];
             for (let i = startX; i <= endX; i++) {
                 if (j < 0 || j >= this.height || i < 0 || i >= this.width) {
                     row.push(null); // Out of bounds
+                    heightRow.push(0);
                 } else {
                     row.push(this.grid[j][i]);
+                    heightRow.push(this.getHeight(i, j)); // Capture exact height at grid center/corner
                 }
             }
             chunk.push(row);
+            heightChunk.push(heightRow);
         }
         return {
             grid: chunk,
+            heightGrid: heightChunk,
             origin: { x: startX, y: startY }
         };
     }

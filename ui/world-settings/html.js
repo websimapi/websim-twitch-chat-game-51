@@ -55,13 +55,6 @@ export function getSettingsHTML(worldName, settings) {
                     <div class="settings-section">
                         <label>Visuals</label>
                         <div class="setting-item">
-                            <label for="view_mode">View Mode</label>
-                            <select id="view_mode" data-path="visuals.view_mode" style="padding: 5px; background: #333; color: #fff; border: 1px solid #555; border-radius: 4px;">
-                                <option value="top-down" ${settings.visuals && settings.visuals.view_mode === 'top-down' ? 'selected' : ''}>Top Down (3D)</option>
-                                <option value="isometric" ${settings.visuals && settings.visuals.view_mode === 'isometric' ? 'selected' : ''}>Isometric (2.5D)</option>
-                            </select>
-                        </div>
-                        <div class="setting-item">
                             <label for="render_distance">Render Distance</label>
                             <input type="number" id="render_distance" data-path="visuals.render_distance" value="${settings.visuals ? settings.visuals.render_distance : 30}" step="1" min="10" max="100">
                         </div>
